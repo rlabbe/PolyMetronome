@@ -91,7 +91,11 @@ void AudioEngine::start()
         QMutexLocker lock(&mutex_);
         active_clicks_.clear();
         position_samples_ = 0;
-        anchor_position_ = 0;
+        // Delay the first beat by ~50ms so the audio backend's pull pipeline
+        // is fully primed before any click is scheduled. Without this, on
+        // first start (after dialog open) WASAPI's startup buffering can
+        // produce a duplicate first click.
+        anchor_position_ = sample_rate_ / 20;
         seq_measure_idx_ = 0;
         subticks_in_measure_ = 0;
         if (sequence_.empty())
