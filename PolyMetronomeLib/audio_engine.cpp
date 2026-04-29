@@ -1,0 +1,286 @@
+#include "audio_engine.h"
+
+#include <QAudioDevice>
+#include <QAudioSink>
+#include <QDebug>
+#include <QMediaDevices>
+#include <algorithm>
+#include <cmath>
+#include <cstdint>
+#include <cstring>
+#include <limits>
+#include <numbers>
+
+AudioEngine::AudioEngine(QObject* parent)
+    : QIODevice(parent)
+{
+    QAudioFormat desired;
+    desired.setSampleRate(sample_rate_);
+    desired.setChannelCount(1);
+    desired.setSampleFormat(QAudioFormat::Int16);
+
+    QAudioDevice device = QMediaDevices::defaultAudioOutput();
+    qInfo() << "AudioEngine: default output device:" << device.description();
+    if (device.isNull())
+        qWarning() << "AudioEngine: no default audio output device available";
+
+    format_ = desired;
+    if (!device.isFormatSupported(format_)) {
+        qWarning() << "AudioEngine: Int16 mono 44100 not supported, using preferred";
+        format_ = device.preferredFormat();
+    }
+    sample_rate_ = format_.sampleRate();
+    qInfo() << "AudioEngine: format rate=" << format_.sampleRate()
+            << "channels=" << format_.channelCount()
+            << "fmt=" << format_.sampleFormat();
+
+    rebuild_click_samples();
+    recompute_sps_locked();
+
+    sink_ = new QAudioSink(device, format_, this);
+    connect(sink_, &QAudioSink::stateChanged, this, [this](QAudio::State s) {
+        qInfo() << "AudioEngine: sink state ->" << s << "error=" << sink_->error();
+    });
+}
+
+AudioEngine::~AudioEngine() = default;
+
+void AudioEngine::rebuild_click_samples()
+{
+    static constexpr float freqs[NumTypes] = { 2500.0f, 1800.0f, 1300.0f, 950.0f, 700.0f, 500.0f };
+    constexpr float mono_freq = 1500.0f;
+    constexpr int duration_ms = 30;
+    constexpr float decay = 80.0f;
+    int n = sample_rate_ * duration_ms / 1000;
+    for (int t = 0; t < NumTypes; ++t) {
+        click_samples_[t].resize(n);
+        for (int i = 0; i < n; ++i) {
+            float ts = static_cast<float>(i) / sample_rate_;
+            float env = std::exp(-ts * decay);
+            click_samples_[t][i] = std::sin(2.0f * std::numbers::pi_v<float> * freqs[t] * ts) * env;
+        }
+    }
+    mono_sample_.resize(n);
+    for (int i = 0; i < n; ++i) {
+        float ts = static_cast<float>(i) / sample_rate_;
+        float env = std::exp(-ts * decay);
+        mono_sample_[i] = std::sin(2.0f * std::numbers::pi_v<float> * mono_freq * ts) * env;
+    }
+}
+
+void AudioEngine::recompute_sps_locked()
+{
+    samples_per_subtick_ = static_cast<double>(sample_rate_) * 60.0 / (static_cast<double>(bpm_) * subs_per_quarter_);
+}
+
+void AudioEngine::start()
+{
+    {
+        QMutexLocker lock(&mutex_);
+        active_clicks_.clear();
+        position_samples_ = 0;
+        anchor_position_ = 0;
+        subticks_since_anchor_ = 0;
+        recompute_sps_locked();
+    }
+    open(QIODevice::ReadOnly);
+    sink_->start(this);
+    qInfo() << "AudioEngine::start: sink state=" << sink_->state()
+            << "error=" << sink_->error()
+            << "bufferSize=" << sink_->bufferSize();
+}
+
+void AudioEngine::stop()
+{
+    sink_->stop();
+    close();
+    QMutexLocker lock(&mutex_);
+    active_clicks_.clear();
+}
+
+bool AudioEngine::is_running() const
+{
+    auto s = sink_->state();
+    return s == QAudio::ActiveState || s == QAudio::IdleState;
+}
+
+void AudioEngine::set_bpm(int bpm)
+{
+    if (bpm <= 0)
+        return;
+    QMutexLocker lock(&mutex_);
+    if (bpm == bpm_)
+        return;
+    bpm_ = bpm;
+    recompute_sps_locked();
+    anchor_position_ = position_samples_;
+    subticks_since_anchor_ = 0;
+}
+
+void AudioEngine::set_master_volume(float vol)
+{
+    QMutexLocker lock(&mutex_);
+    master_volume_ = vol;
+}
+
+void AudioEngine::set_volume(ClickType type, float vol)
+{
+    if (type < 0 || type >= NumTypes)
+        return;
+    QMutexLocker lock(&mutex_);
+    volumes_[type] = vol;
+}
+
+void AudioEngine::set_beats_per_measure(int n)
+{
+    if (n <= 0)
+        return;
+    QMutexLocker lock(&mutex_);
+    beats_per_measure_ = n;
+}
+
+void AudioEngine::set_mono_mode(bool on)
+{
+    QMutexLocker lock(&mutex_);
+    mono_mode_ = on;
+}
+
+qint64 AudioEngine::readData(char* data, qint64 max_len)
+{
+    int channels = format_.channelCount();
+    int bytes_per_sample = format_.bytesPerSample();
+    if (channels <= 0 || bytes_per_sample <= 0)
+        return 0;
+
+    int bytes_per_frame = channels * bytes_per_sample;
+    qint64 n_frames = max_len / bytes_per_frame;
+    if (n_frames <= 0)
+        return 0;
+
+    scratch_.assign(static_cast<size_t>(n_frames), 0.0f);
+
+    QMutexLocker lock(&mutex_);
+
+    auto schedule = [&](qint64 spos, ClickType t) {
+        float v = volumes_[t];
+        if (v <= 0.0f)
+            return;
+        ActiveClick c;
+        c.start_in_buffer = spos - position_samples_;
+        c.pos_in_click = 0;
+        c.gain = v;
+        c.type = t;
+        active_clicks_.push_back(c);
+    };
+
+    qint64 buffer_end = position_samples_ + n_frames;
+    while (true) {
+        qint64 spos = anchor_position_ + static_cast<qint64>(std::round(static_cast<double>(subticks_since_anchor_) * samples_per_subtick_));
+        if (spos >= buffer_end)
+            break;
+        if (spos >= position_samples_) {
+            int idx_mod = static_cast<int>(subticks_since_anchor_ % subs_per_quarter_);
+            qint64 quarter_index = subticks_since_anchor_ / subs_per_quarter_;
+            // 60 subs per quarter. Offbeats only (positions sharing with a coarser
+            // subdivision are owned by that coarser one):
+            //   0           = quarter beat (and accent on first of measure)
+            //   30          = eighth offbeat
+            //   15, 45      = sixteenth offbeats
+            //   20, 40      = triplet offbeats
+            //   12,24,36,48 = quintuplet offbeats
+            if (idx_mod == 0) {
+                schedule(spos, Quarter);
+                bool first_of_measure = beats_per_measure_ > 0 && (quarter_index % beats_per_measure_ == 0);
+                if (first_of_measure)
+                    schedule(spos, Accent);
+            }
+            else if (idx_mod == 30)
+                schedule(spos, Eighth);
+            else if (idx_mod == 15 || idx_mod == 45)
+                schedule(spos, Sixteenth);
+            else if (idx_mod == 20 || idx_mod == 40)
+                schedule(spos, Triplet);
+            else if (idx_mod == 12 || idx_mod == 24 || idx_mod == 36 || idx_mod == 48)
+                schedule(spos, Quintuplet);
+        }
+        ++subticks_since_anchor_;
+    }
+
+    for (auto& click : active_clicks_) {
+        const std::vector<float>& sample_buf = (mono_mode_ && click.type != Accent) ? mono_sample_ : click_samples_[click.type];
+        qint64 click_remaining = static_cast<qint64>(sample_buf.size()) - static_cast<qint64>(click.pos_in_click);
+        qint64 buffer_remaining = n_frames - click.start_in_buffer;
+        qint64 to_mix = std::min(click_remaining, buffer_remaining);
+        if (to_mix > 0) {
+            for (qint64 i = 0; i < to_mix; ++i)
+                scratch_[static_cast<size_t>(click.start_in_buffer + i)] += sample_buf[click.pos_in_click + static_cast<size_t>(i)] * click.gain;
+            click.pos_in_click += static_cast<size_t>(to_mix);
+        }
+        click.start_in_buffer = 0;
+    }
+    std::erase_if(active_clicks_, [this](const ActiveClick& c) {
+        const std::vector<float>& sample_buf = (mono_mode_ && c.type != Accent) ? mono_sample_ : click_samples_[c.type];
+        return c.pos_in_click >= sample_buf.size();
+    });
+
+    float master = master_volume_;
+    for (qint64 i = 0; i < n_frames; ++i) {
+        float v = scratch_[static_cast<size_t>(i)] * master;
+        if (v > 1.0f)
+            v = 1.0f;
+        else if (v < -1.0f)
+            v = -1.0f;
+        scratch_[static_cast<size_t>(i)] = v;
+    }
+
+    position_samples_ += n_frames;
+
+    auto fmt = format_.sampleFormat();
+    if (fmt == QAudioFormat::Int16) {
+        int16_t* out = reinterpret_cast<int16_t*>(data);
+        for (qint64 i = 0; i < n_frames; ++i) {
+            int16_t s = static_cast<int16_t>(scratch_[static_cast<size_t>(i)] * 32767.0f);
+            for (int c = 0; c < channels; ++c)
+                *out++ = s;
+        }
+    }
+    else if (fmt == QAudioFormat::Float) {
+        float* out = reinterpret_cast<float*>(data);
+        for (qint64 i = 0; i < n_frames; ++i) {
+            float s = scratch_[static_cast<size_t>(i)];
+            for (int c = 0; c < channels; ++c)
+                *out++ = s;
+        }
+    }
+    else if (fmt == QAudioFormat::Int32) {
+        int32_t* out = reinterpret_cast<int32_t*>(data);
+        for (qint64 i = 0; i < n_frames; ++i) {
+            int32_t s = static_cast<int32_t>(scratch_[static_cast<size_t>(i)] * 2147483647.0f);
+            for (int c = 0; c < channels; ++c)
+                *out++ = s;
+        }
+    }
+    else if (fmt == QAudioFormat::UInt8) {
+        uint8_t* out = reinterpret_cast<uint8_t*>(data);
+        for (qint64 i = 0; i < n_frames; ++i) {
+            uint8_t s = static_cast<uint8_t>(scratch_[static_cast<size_t>(i)] * 127.0f + 128.0f);
+            for (int c = 0; c < channels; ++c)
+                *out++ = s;
+        }
+    }
+    else {
+        std::memset(data, 0, static_cast<size_t>(n_frames * bytes_per_frame));
+    }
+
+    return n_frames * bytes_per_frame;
+}
+
+qint64 AudioEngine::writeData(const char*, qint64)
+{
+    return 0;
+}
+
+qint64 AudioEngine::bytesAvailable() const
+{
+    return std::numeric_limits<qint64>::max();
+}
