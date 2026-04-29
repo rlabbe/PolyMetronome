@@ -1,8 +1,13 @@
 #include "meter_card.h"
 
+#include <QApplication>
+#include <QByteArray>
+#include <QDrag>
 #include <QFontMetrics>
+#include <QMimeData>
 #include <QMouseEvent>
 #include <QPainter>
+#include <QPixmap>
 #include <algorithm>
 
 MeterCard::MeterCard(QWidget* parent)
@@ -95,7 +100,31 @@ void MeterCard::paintEvent(QPaintEvent*)
 
 void MeterCard::mousePressEvent(QMouseEvent* e)
 {
-    if (e->button() == Qt::LeftButton)
+    if (e->button() == Qt::LeftButton || e->button() == Qt::RightButton)
+        press_pos_ = e->pos();
+}
+
+void MeterCard::mouseMoveEvent(QMouseEvent* e)
+{
+    if (!(e->buttons() & (Qt::LeftButton | Qt::RightButton)))
+        return;
+    if ((e->pos() - press_pos_).manhattanLength() < QApplication::startDragDistance())
+        return;
+    if (index_ < 0)
+        return;
+
+    auto* drag = new QDrag(this);
+    auto* mime = new QMimeData;
+    mime->setData("application/x-meter-card-index", QByteArray::number(index_));
+    drag->setMimeData(mime);
+    drag->setPixmap(grab());
+    drag->setHotSpot(press_pos_);
+    drag->exec(Qt::MoveAction);
+}
+
+void MeterCard::mouseReleaseEvent(QMouseEvent* e)
+{
+    if (e->button() == Qt::LeftButton || e->button() == Qt::RightButton)
         emit clicked();
 }
 

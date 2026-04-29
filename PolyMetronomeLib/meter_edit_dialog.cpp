@@ -9,6 +9,15 @@
 #include <QSpinBox>
 #include <QVBoxLayout>
 
+namespace {
+class InvertedSpinBox : public QSpinBox
+{
+public:
+    using QSpinBox::QSpinBox;
+    void stepBy(int steps) override { QSpinBox::stepBy(-steps); }
+};
+}
+
 MeterEditDialog::MeterEditDialog(const MeasureSpec& spec, bool can_delete, bool can_move_left, bool can_move_right, QWidget* parent)
     : QDialog(parent)
 {
@@ -37,7 +46,7 @@ MeterEditDialog::MeterEditDialog(const MeasureSpec& spec, bool can_delete, bool 
 
     auto* form = new QFormLayout;
 
-    numerator_ = new QSpinBox(this);
+    numerator_ = new InvertedSpinBox(this);
     numerator_->setRange(1, 32);
     numerator_->setValue(spec.numerator);
 
@@ -47,7 +56,7 @@ MeterEditDialog::MeterEditDialog(const MeasureSpec& spec, bool can_delete, bool 
     int idx = denominator_->findData(spec.denominator);
     denominator_->setCurrentIndex(idx >= 0 ? idx : 2);
 
-    repeat_ = new QSpinBox(this);
+    repeat_ = new InvertedSpinBox(this);
     repeat_->setRange(1, 99);
     repeat_->setValue(std::max(1, spec.repeat));
 
