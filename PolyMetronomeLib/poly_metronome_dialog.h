@@ -19,6 +19,10 @@ public:
     explicit PolyMetronomeDialog(QWidget* parent = nullptr);
     ~PolyMetronomeDialog() override;
 
+protected:
+    void closeEvent(QCloseEvent* event) override;
+    void hideEvent(QHideEvent* event) override;
+
 private slots:
     void on_start_stop_clicked();
     void on_bpm_changed(int bpm);

@@ -102,7 +102,29 @@ PolyMetronomeDialog::PolyMetronomeDialog(QWidget* parent)
     resize(width() * 2, height());
 }
 
-PolyMetronomeDialog::~PolyMetronomeDialog() = default;
+PolyMetronomeDialog::~PolyMetronomeDialog()
+{
+    if (metronome_->is_running())
+        metronome_->stop();
+}
+
+void PolyMetronomeDialog::closeEvent(QCloseEvent* event)
+{
+    if (metronome_->is_running()) {
+        metronome_->stop();
+        start_stop_->setText("Start");
+    }
+    QDialog::closeEvent(event);
+}
+
+void PolyMetronomeDialog::hideEvent(QHideEvent* event)
+{
+    if (metronome_->is_running()) {
+        metronome_->stop();
+        start_stop_->setText("Start");
+    }
+    QDialog::hideEvent(event);
+}
 
 void PolyMetronomeDialog::on_start_stop_clicked()
 {
