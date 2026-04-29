@@ -68,9 +68,21 @@ void AudioEngine::rebuild_click_samples()
     }
 }
 
+const MeasureSpec& AudioEngine::current_measure_locked() const
+{
+    static const MeasureSpec fallback{ 4, 4, 1, {} };
+    if (sequence_.empty())
+        return fallback;
+    auto* m = sequence_.at_absolute(seq_measure_idx_);
+    return m ? *m : fallback;
+}
+
 void AudioEngine::recompute_sps_locked()
 {
-    samples_per_subtick_ = static_cast<double>(sample_rate_) * 60.0 / (static_cast<double>(bpm_) * subs_per_quarter_);
+    int denom = current_measure_locked().denominator;
+    if (denom <= 0)
+        denom = 4;
+    samples_per_subtick_ = static_cast<double>(sample_rate_) * 4.0 / (static_cast<double>(bpm_) * static_cast<double>(denom));
 }
 
 void AudioEngine::start()
@@ -80,7 +92,10 @@ void AudioEngine::start()
         active_clicks_.clear();
         position_samples_ = 0;
         anchor_position_ = 0;
-        subticks_since_anchor_ = 0;
+        seq_measure_idx_ = 0;
+        subticks_in_measure_ = 0;
+        if (sequence_.empty())
+            sequence_ = MeterSequence::default_4_4();
         recompute_sps_locked();
     }
     open(QIODevice::ReadOnly);
@@ -114,7 +129,7 @@ void AudioEngine::set_bpm(int bpm)
     bpm_ = bpm;
     recompute_sps_locked();
     anchor_position_ = position_samples_;
-    subticks_since_anchor_ = 0;
+    subticks_in_measure_ = 0;
 }
 
 void AudioEngine::set_master_volume(float vol)
@@ -131,12 +146,16 @@ void AudioEngine::set_volume(ClickType type, float vol)
     volumes_[type] = vol;
 }
 
-void AudioEngine::set_beats_per_measure(int n)
+void AudioEngine::set_sequence(const MeterSequence& seq)
 {
-    if (n <= 0)
-        return;
     QMutexLocker lock(&mutex_);
-    beats_per_measure_ = n;
+    sequence_ = seq;
+    if (sequence_.empty())
+        sequence_ = MeterSequence::default_4_4();
+    seq_measure_idx_ = 0;
+    subticks_in_measure_ = 0;
+    anchor_position_ = position_samples_;
+    recompute_sps_locked();
 }
 
 void AudioEngine::set_mono_mode(bool on)
@@ -175,35 +194,49 @@ qint64 AudioEngine::readData(char* data, qint64 max_len)
 
     qint64 buffer_end = position_samples_ + n_frames;
     while (true) {
-        qint64 spos = anchor_position_ + static_cast<qint64>(std::round(static_cast<double>(subticks_since_anchor_) * samples_per_subtick_));
+        const MeasureSpec& m = current_measure_locked();
+        int curr_numer = m.numerator > 0 ? m.numerator : 4;
+        qint64 subs_in_curr_measure = static_cast<qint64>(curr_numer) * subs_per_beat_;
+
+        qint64 spos = anchor_position_ + static_cast<qint64>(std::round(static_cast<double>(subticks_in_measure_) * samples_per_subtick_));
         if (spos >= buffer_end)
             break;
+
         if (spos >= position_samples_) {
-            int idx_mod = static_cast<int>(subticks_since_anchor_ % subs_per_quarter_);
-            qint64 quarter_index = subticks_since_anchor_ / subs_per_quarter_;
-            // 60 subs per quarter. Offbeats only (positions sharing with a coarser
-            // subdivision are owned by that coarser one):
-            //   0           = quarter beat (and accent on first of measure)
-            //   30          = eighth offbeat
-            //   15, 45      = sixteenth offbeats
-            //   20, 40      = triplet offbeats
-            //   12,24,36,48 = quintuplet offbeats
-            if (idx_mod == 0) {
+            int sub_within_beat = static_cast<int>(subticks_in_measure_ % subs_per_beat_);
+            int beat = static_cast<int>(subticks_in_measure_ / subs_per_beat_);
+            // 60 sub-ticks per beat. Offbeat positions only:
+            //   0           = beat (and accent on first beat of measure)
+            //   30          = "eighth" offbeat (2 per beat)
+            //   15, 45      = "sixteenth" offbeats (4 per beat)
+            //   20, 40      = "triplet" offbeats (3 per beat)
+            //   12,24,36,48 = "quintuplet" offbeats (5 per beat)
+            if (sub_within_beat == 0) {
                 schedule(spos, Quarter);
-                bool first_of_measure = beats_per_measure_ > 0 && (quarter_index % beats_per_measure_ == 0);
-                if (first_of_measure)
+                if (beat == 0)
                     schedule(spos, Accent);
             }
-            else if (idx_mod == 30)
+            else if (sub_within_beat == 30)
                 schedule(spos, Eighth);
-            else if (idx_mod == 15 || idx_mod == 45)
+            else if (sub_within_beat == 15 || sub_within_beat == 45)
                 schedule(spos, Sixteenth);
-            else if (idx_mod == 20 || idx_mod == 40)
+            else if (sub_within_beat == 20 || sub_within_beat == 40)
                 schedule(spos, Triplet);
-            else if (idx_mod == 12 || idx_mod == 24 || idx_mod == 36 || idx_mod == 48)
+            else if (sub_within_beat == 12 || sub_within_beat == 24 || sub_within_beat == 36 || sub_within_beat == 48)
                 schedule(spos, Quintuplet);
         }
-        ++subticks_since_anchor_;
+
+        ++subticks_in_measure_;
+
+        if (subticks_in_measure_ >= subs_in_curr_measure) {
+            anchor_position_ = anchor_position_ + static_cast<qint64>(std::round(static_cast<double>(subs_in_curr_measure) * samples_per_subtick_));
+            subticks_in_measure_ = 0;
+            int total = sequence_.total_measures();
+            if (total <= 0)
+                total = 1;
+            seq_measure_idx_ = (seq_measure_idx_ + 1) % total;
+            recompute_sps_locked();
+        }
     }
 
     for (auto& click : active_clicks_) {

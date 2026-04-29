@@ -1,5 +1,7 @@
 #pragma once
 
+#include "meter.h"
+
 #include <QObject>
 
 class AudioEngine;
@@ -24,7 +26,7 @@ public:
     void set_quintuplet_volume(float v);
     void set_accent_volume(float v);
     void set_master_volume(float v);
-    void set_beats_per_measure(int n);
+    void set_sequence(const MeterSequence& seq);
     void set_mono_mode(bool on);
 
 private:

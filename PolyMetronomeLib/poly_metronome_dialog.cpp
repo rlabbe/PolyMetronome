@@ -1,5 +1,6 @@
 #include "poly_metronome_dialog.h"
 
+#include "meter_sequence_widget.h"
 #include "poly_metronome.h"
 
 #include <QDial>
@@ -17,7 +18,13 @@ PolyMetronomeDialog::PolyMetronomeDialog(QWidget* parent)
 {
     setWindowTitle("PolyMetronome");
 
-    auto* layout = new QFormLayout(this);
+    auto* main = new QVBoxLayout(this);
+
+    meter_widget_ = new MeterSequenceWidget(this);
+    main->addWidget(meter_widget_);
+
+    auto* form = new QFormLayout;
+    form->setContentsMargins(0, 8, 0, 0);
 
     bpm_dial_ = new QDial(this);
     bpm_dial_->setRange(30, 240);
@@ -32,7 +39,7 @@ PolyMetronomeDialog::PolyMetronomeDialog(QWidget* parent)
     bpm_v->setContentsMargins(0, 0, 0, 0);
     bpm_v->addWidget(bpm_label_);
     bpm_v->addWidget(bpm_dial_, 0, Qt::AlignHCenter);
-    layout->addRow(bpm_row);
+    form->addRow(bpm_row);
 
     auto make_slider = [this](int default_pct) {
         auto* s = new QSlider(Qt::Horizontal, this);
@@ -49,34 +56,25 @@ PolyMetronomeDialog::PolyMetronomeDialog(QWidget* parent)
     accent_volume_ = make_slider(0);
     master_volume_ = make_slider(80);
 
-    layout->addRow("Quarter", quarter_volume_);
-    layout->addRow("Eighth", eighth_volume_);
-    layout->addRow("Sixteenth", sixteenth_volume_);
-    layout->addRow("Triplet", triplet_volume_);
-    layout->addRow("Quintuplet", quintuplet_volume_);
-    layout->addRow("Accent", accent_volume_);
-
-    beats_per_measure_ = new QSlider(Qt::Horizontal, this);
-    beats_per_measure_->setRange(1, 16);
-    beats_per_measure_->setValue(4);
-    beats_per_measure_label_ = new QLabel("4", this);
-    auto* bpm_meas_row = new QWidget(this);
-    auto* bpm_meas_h = new QHBoxLayout(bpm_meas_row);
-    bpm_meas_h->setContentsMargins(0, 0, 0, 0);
-    bpm_meas_h->addWidget(beats_per_measure_);
-    bpm_meas_h->addWidget(beats_per_measure_label_);
-    layout->addRow("Beats/Measure", bpm_meas_row);
-
-    layout->addRow("Master", master_volume_);
+    form->addRow("Quarter", quarter_volume_);
+    form->addRow("Eighth", eighth_volume_);
+    form->addRow("Sixteenth", sixteenth_volume_);
+    form->addRow("Triplet", triplet_volume_);
+    form->addRow("Quintuplet", quintuplet_volume_);
+    form->addRow("Accent", accent_volume_);
+    form->addRow("Master", master_volume_);
 
     sound_mode_button_ = new QPushButton(this);
     sound_mode_button_->setCheckable(true);
     sound_mode_button_->setChecked(true);
-    layout->addRow(sound_mode_button_);
+    form->addRow(sound_mode_button_);
 
     start_stop_ = new QPushButton("Start", this);
-    layout->addRow(start_stop_);
+    form->addRow(start_stop_);
 
+    main->addLayout(form);
+
+    connect(meter_widget_, &MeterSequenceWidget::sequence_changed, this, &PolyMetronomeDialog::on_sequence_changed);
     connect(bpm_dial_, &QDial::valueChanged, this, &PolyMetronomeDialog::on_bpm_changed);
     connect(master_volume_, &QSlider::valueChanged, this, &PolyMetronomeDialog::on_master_volume_changed);
     connect(quarter_volume_, &QSlider::valueChanged, this, &PolyMetronomeDialog::on_quarter_volume_changed);
@@ -85,10 +83,10 @@ PolyMetronomeDialog::PolyMetronomeDialog(QWidget* parent)
     connect(triplet_volume_, &QSlider::valueChanged, this, &PolyMetronomeDialog::on_triplet_volume_changed);
     connect(quintuplet_volume_, &QSlider::valueChanged, this, &PolyMetronomeDialog::on_quintuplet_volume_changed);
     connect(accent_volume_, &QSlider::valueChanged, this, &PolyMetronomeDialog::on_accent_volume_changed);
-    connect(beats_per_measure_, &QSlider::valueChanged, this, &PolyMetronomeDialog::on_beats_per_measure_changed);
     connect(sound_mode_button_, &QPushButton::toggled, this, &PolyMetronomeDialog::on_sound_mode_toggled);
     connect(start_stop_, &QPushButton::clicked, this, &PolyMetronomeDialog::on_start_stop_clicked);
 
+    on_sequence_changed(meter_widget_->sequence());
     on_bpm_changed(bpm_dial_->value());
     on_master_volume_changed(master_volume_->value());
     on_quarter_volume_changed(quarter_volume_->value());
@@ -97,7 +95,6 @@ PolyMetronomeDialog::PolyMetronomeDialog(QWidget* parent)
     on_triplet_volume_changed(triplet_volume_->value());
     on_quintuplet_volume_changed(quintuplet_volume_->value());
     on_accent_volume_changed(accent_volume_->value());
-    on_beats_per_measure_changed(beats_per_measure_->value());
     on_sound_mode_toggled(sound_mode_button_->isChecked());
 
     adjustSize();
@@ -160,10 +157,9 @@ void PolyMetronomeDialog::on_accent_volume_changed(int v)
     metronome_->set_accent_volume(v / 100.0f);
 }
 
-void PolyMetronomeDialog::on_beats_per_measure_changed(int n)
+void PolyMetronomeDialog::on_sequence_changed(const MeterSequence& seq)
 {
-    metronome_->set_beats_per_measure(n);
-    beats_per_measure_label_->setText(QString::number(n));
+    metronome_->set_sequence(seq);
 }
 
 void PolyMetronomeDialog::on_sound_mode_toggled(bool checked)

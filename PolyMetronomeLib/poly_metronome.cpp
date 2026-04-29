@@ -65,9 +65,9 @@ void PolyMetronome::set_accent_volume(float v)
     audio_->set_volume(AudioEngine::Accent, v);
 }
 
-void PolyMetronome::set_beats_per_measure(int n)
+void PolyMetronome::set_sequence(const MeterSequence& seq)
 {
-    audio_->set_beats_per_measure(n);
+    audio_->set_sequence(seq);
 }
 
 void PolyMetronome::set_mono_mode(bool on)

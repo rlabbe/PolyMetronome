@@ -1,5 +1,7 @@
 #pragma once
 
+#include "meter.h"
+
 #include <QAudioFormat>
 #include <QIODevice>
 #include <QMutex>
@@ -34,7 +36,7 @@ public:
     void set_bpm(int bpm);
     void set_master_volume(float vol);
     void set_volume(ClickType type, float vol);
-    void set_beats_per_measure(int n);
+    void set_sequence(const MeterSequence& seq);
     void set_mono_mode(bool on);
 
     bool isSequential() const override { return true; }
@@ -45,7 +47,7 @@ protected:
     qint64 writeData(const char* data, qint64 len) override;
 
 private:
-    static constexpr int subs_per_quarter_ = 60;
+    static constexpr int subs_per_beat_ = 60;
 
     struct ActiveClick
     {
@@ -57,6 +59,7 @@ private:
 
     void rebuild_click_samples();
     void recompute_sps_locked();
+    const MeasureSpec& current_measure_locked() const;
 
     QAudioSink* sink_ = nullptr;
     QAudioFormat format_;
@@ -69,11 +72,12 @@ private:
 
     mutable QMutex mutex_;
     int bpm_ = 60;
-    int beats_per_measure_ = 4;
+    MeterSequence sequence_ = MeterSequence::default_4_4();
+    int seq_measure_idx_ = 0;
+    qint64 subticks_in_measure_ = 0;
     double samples_per_subtick_ = 0.0;
     qint64 position_samples_ = 0;
     qint64 anchor_position_ = 0;
-    qint64 subticks_since_anchor_ = 0;
     float master_volume_ = 1.0f;
     bool mono_mode_ = true;
     std::array<float, NumTypes> volumes_ = { { 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f } };

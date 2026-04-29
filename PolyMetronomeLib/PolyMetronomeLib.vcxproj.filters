@@ -2,11 +2,19 @@
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
     <ClCompile Include="audio_engine.cpp" />
+    <ClCompile Include="meter.cpp" />
+    <ClCompile Include="meter_card.cpp" />
+    <ClCompile Include="meter_edit_dialog.cpp" />
+    <ClCompile Include="meter_sequence_widget.cpp" />
     <ClCompile Include="poly_metronome.cpp" />
     <ClCompile Include="poly_metronome_dialog.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="meter.h" />
     <QtMoc Include="audio_engine.h" />
+    <QtMoc Include="meter_card.h" />
+    <QtMoc Include="meter_edit_dialog.h" />
+    <QtMoc Include="meter_sequence_widget.h" />
     <QtMoc Include="poly_metronome.h" />
     <QtMoc Include="poly_metronome_dialog.h" />
   </ItemGroup>
