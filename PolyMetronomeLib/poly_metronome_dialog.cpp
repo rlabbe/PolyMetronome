@@ -108,6 +108,63 @@ PolyMetronomeDialog::~PolyMetronomeDialog()
         metronome_->stop();
 }
 
+PolyMetronomeState PolyMetronomeDialog::state() const
+{
+    PolyMetronomeState s;
+    s.bpm = bpm_dial_->value();
+    s.master_volume = master_volume_->value() / 100.0f;
+    s.accent_volume = accent_volume_->value() / 100.0f;
+    s.quarter_volume = quarter_volume_->value() / 100.0f;
+    s.eighth_volume = eighth_volume_->value() / 100.0f;
+    s.sixteenth_volume = sixteenth_volume_->value() / 100.0f;
+    s.triplet_volume = triplet_volume_->value() / 100.0f;
+    s.quintuplet_volume = quintuplet_volume_->value() / 100.0f;
+    s.mono_mode = sound_mode_button_->isChecked();
+    s.sequence = meter_widget_->sequence();
+    return s;
+}
+
+void PolyMetronomeDialog::apply_state(const PolyMetronomeState& s)
+{
+    {
+        QSignalBlocker b1(bpm_dial_);
+        QSignalBlocker b2(master_volume_);
+        QSignalBlocker b3(accent_volume_);
+        QSignalBlocker b4(quarter_volume_);
+        QSignalBlocker b5(eighth_volume_);
+        QSignalBlocker b6(sixteenth_volume_);
+        QSignalBlocker b7(triplet_volume_);
+        QSignalBlocker b8(quintuplet_volume_);
+        QSignalBlocker b9(sound_mode_button_);
+        QSignalBlocker b10(meter_widget_);
+
+        bpm_dial_->setValue(s.bpm);
+        master_volume_->setValue(static_cast<int>(s.master_volume * 100.0f));
+        accent_volume_->setValue(static_cast<int>(s.accent_volume * 100.0f));
+        quarter_volume_->setValue(static_cast<int>(s.quarter_volume * 100.0f));
+        eighth_volume_->setValue(static_cast<int>(s.eighth_volume * 100.0f));
+        sixteenth_volume_->setValue(static_cast<int>(s.sixteenth_volume * 100.0f));
+        triplet_volume_->setValue(static_cast<int>(s.triplet_volume * 100.0f));
+        quintuplet_volume_->setValue(static_cast<int>(s.quintuplet_volume * 100.0f));
+        sound_mode_button_->setChecked(s.mono_mode);
+        meter_widget_->set_sequence(s.sequence);
+    }
+
+    bpm_label_->setText(QString::number(s.bpm));
+    sound_mode_button_->setText(s.mono_mode ? "Single Pitch" : "Multi Pitch");
+
+    metronome_->set_bpm(s.bpm);
+    metronome_->set_master_volume(s.master_volume);
+    metronome_->set_accent_volume(s.accent_volume);
+    metronome_->set_quarter_volume(s.quarter_volume);
+    metronome_->set_eighth_volume(s.eighth_volume);
+    metronome_->set_sixteenth_volume(s.sixteenth_volume);
+    metronome_->set_triplet_volume(s.triplet_volume);
+    metronome_->set_quintuplet_volume(s.quintuplet_volume);
+    metronome_->set_mono_mode(s.mono_mode);
+    metronome_->set_sequence(s.sequence);
+}
+
 void PolyMetronomeDialog::closeEvent(QCloseEvent* event)
 {
     if (metronome_->is_running()) {
@@ -142,50 +199,60 @@ void PolyMetronomeDialog::on_bpm_changed(int bpm)
 {
     metronome_->set_bpm(bpm);
     bpm_label_->setText(QString::number(bpm));
+    emit state_changed();
 }
 
 void PolyMetronomeDialog::on_master_volume_changed(int v)
 {
     metronome_->set_master_volume(v / 100.0f);
+    emit state_changed();
 }
 
 void PolyMetronomeDialog::on_quarter_volume_changed(int v)
 {
     metronome_->set_quarter_volume(v / 100.0f);
+    emit state_changed();
 }
 
 void PolyMetronomeDialog::on_eighth_volume_changed(int v)
 {
     metronome_->set_eighth_volume(v / 100.0f);
+    emit state_changed();
 }
 
 void PolyMetronomeDialog::on_sixteenth_volume_changed(int v)
 {
     metronome_->set_sixteenth_volume(v / 100.0f);
+    emit state_changed();
 }
 
 void PolyMetronomeDialog::on_triplet_volume_changed(int v)
 {
     metronome_->set_triplet_volume(v / 100.0f);
+    emit state_changed();
 }
 
 void PolyMetronomeDialog::on_quintuplet_volume_changed(int v)
 {
     metronome_->set_quintuplet_volume(v / 100.0f);
+    emit state_changed();
 }
 
 void PolyMetronomeDialog::on_accent_volume_changed(int v)
 {
     metronome_->set_accent_volume(v / 100.0f);
+    emit state_changed();
 }
 
 void PolyMetronomeDialog::on_sequence_changed(const MeterSequence& seq)
 {
     metronome_->set_sequence(seq);
+    emit state_changed();
 }
 
 void PolyMetronomeDialog::on_sound_mode_toggled(bool checked)
 {
     metronome_->set_mono_mode(checked);
     sound_mode_button_->setText(checked ? "Single Pitch" : "Multi Pitch");
+    emit state_changed();
 }

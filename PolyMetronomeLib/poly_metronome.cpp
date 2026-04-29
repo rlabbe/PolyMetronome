@@ -2,6 +2,39 @@
 
 #include "audio_engine.h"
 
+QJsonObject PolyMetronomeState::to_json() const
+{
+    QJsonObject obj;
+    obj["bpm"] = bpm;
+    obj["master_volume"] = master_volume;
+    obj["accent_volume"] = accent_volume;
+    obj["quarter_volume"] = quarter_volume;
+    obj["eighth_volume"] = eighth_volume;
+    obj["sixteenth_volume"] = sixteenth_volume;
+    obj["triplet_volume"] = triplet_volume;
+    obj["quintuplet_volume"] = quintuplet_volume;
+    obj["mono_mode"] = mono_mode;
+    obj["sequence"] = sequence.to_json();
+    return obj;
+}
+
+PolyMetronomeState PolyMetronomeState::from_json(const QJsonObject& obj)
+{
+    PolyMetronomeState s;
+    s.bpm = obj.value("bpm").toInt(60);
+    s.master_volume = static_cast<float>(obj.value("master_volume").toDouble(0.8));
+    s.accent_volume = static_cast<float>(obj.value("accent_volume").toDouble(0.0));
+    s.quarter_volume = static_cast<float>(obj.value("quarter_volume").toDouble(1.0));
+    s.eighth_volume = static_cast<float>(obj.value("eighth_volume").toDouble(0.0));
+    s.sixteenth_volume = static_cast<float>(obj.value("sixteenth_volume").toDouble(0.0));
+    s.triplet_volume = static_cast<float>(obj.value("triplet_volume").toDouble(0.0));
+    s.quintuplet_volume = static_cast<float>(obj.value("quintuplet_volume").toDouble(0.0));
+    s.mono_mode = obj.value("mono_mode").toBool(true);
+    if (obj.contains("sequence"))
+        s.sequence = MeterSequence::from_json(obj.value("sequence").toArray());
+    return s;
+}
+
 PolyMetronome::PolyMetronome(QObject* parent)
     : QObject(parent)
     , audio_(new AudioEngine(this))

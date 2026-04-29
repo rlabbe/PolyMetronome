@@ -1,5 +1,7 @@
 #pragma once
 
+#include <QJsonArray>
+#include <QJsonObject>
 #include <QString>
 #include <vector>
 
@@ -23,6 +25,9 @@ struct MeasureSpec
 
     QString time_signature_string() const;
     bool operator==(const MeasureSpec& other) const;
+
+    QJsonObject to_json() const;
+    static MeasureSpec from_json(const QJsonObject& obj);
 };
 
 class MeterSequence
@@ -36,6 +41,9 @@ public:
     int total_measures() const;
     const MeasureSpec* at_absolute(int absolute_idx) const;
     bool empty() const { return measures.empty(); }
+
+    QJsonArray to_json() const;
+    static MeterSequence from_json(const QJsonArray& arr);
 
     static MeterSequence default_4_4();
 };

@@ -96,6 +96,47 @@ MeterSequence MeterSequence::default_4_4()
     return s;
 }
 
+QJsonObject MeasureSpec::to_json() const
+{
+    QJsonObject obj;
+    obj["numerator"] = numerator;
+    obj["denominator"] = denominator;
+    obj["repeat"] = repeat;
+    QJsonArray g;
+    for (int s : grouping.sizes)
+        g.append(s);
+    obj["grouping"] = g;
+    return obj;
+}
+
+MeasureSpec MeasureSpec::from_json(const QJsonObject& obj)
+{
+    MeasureSpec m;
+    m.numerator = obj.value("numerator").toInt(4);
+    m.denominator = obj.value("denominator").toInt(4);
+    m.repeat = obj.value("repeat").toInt(1);
+    QJsonArray g = obj.value("grouping").toArray();
+    for (const auto& v : g)
+        m.grouping.sizes.push_back(v.toInt());
+    return m;
+}
+
+QJsonArray MeterSequence::to_json() const
+{
+    QJsonArray arr;
+    for (const auto& m : measures)
+        arr.append(m.to_json());
+    return arr;
+}
+
+MeterSequence MeterSequence::from_json(const QJsonArray& arr)
+{
+    MeterSequence seq;
+    for (const auto& v : arr)
+        seq.measures.push_back(MeasureSpec::from_json(v.toObject()));
+    return seq;
+}
+
 const std::vector<Preset>& PresetLibrary::all()
 {
     static const std::vector<Preset> presets = []() {

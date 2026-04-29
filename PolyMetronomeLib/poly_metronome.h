@@ -2,9 +2,27 @@
 
 #include "meter.h"
 
+#include <QJsonObject>
 #include <QObject>
 
 class AudioEngine;
+
+struct PolyMetronomeState
+{
+    int bpm = 60;
+    float master_volume = 0.8f;
+    float accent_volume = 0.0f;
+    float quarter_volume = 1.0f;
+    float eighth_volume = 0.0f;
+    float sixteenth_volume = 0.0f;
+    float triplet_volume = 0.0f;
+    float quintuplet_volume = 0.0f;
+    bool mono_mode = true;
+    MeterSequence sequence = MeterSequence::default_4_4();
+
+    QJsonObject to_json() const;
+    static PolyMetronomeState from_json(const QJsonObject& obj);
+};
 
 class PolyMetronome : public QObject
 {

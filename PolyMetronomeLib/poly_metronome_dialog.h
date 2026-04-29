@@ -1,6 +1,7 @@
 #pragma once
 
 #include "meter.h"
+#include "poly_metronome.h"
 
 #include <QDialog>
 
@@ -18,6 +19,12 @@ class PolyMetronomeDialog : public QDialog
 public:
     explicit PolyMetronomeDialog(QWidget* parent = nullptr);
     ~PolyMetronomeDialog() override;
+
+    PolyMetronomeState state() const;
+    void apply_state(const PolyMetronomeState& s);
+
+signals:
+    void state_changed();
 
 protected:
     void closeEvent(QCloseEvent* event) override;
