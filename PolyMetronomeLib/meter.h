@@ -1,11 +1,13 @@
 #pragma once
 
+#include "poly_metronome_export.h"
+
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QString>
 #include <vector>
 
-struct Grouping
+struct POLYMETRONOME_API Grouping
 {
     std::vector<int> sizes;
 
@@ -16,7 +18,7 @@ struct Grouping
     static Grouping parse(const QString& s, int numerator, bool* ok = nullptr);
 };
 
-struct MeasureSpec
+struct POLYMETRONOME_API MeasureSpec
 {
     int numerator = 4;
     int denominator = 4;
@@ -30,7 +32,7 @@ struct MeasureSpec
     static MeasureSpec from_json(const QJsonObject& obj);
 };
 
-class MeterSequence
+class POLYMETRONOME_API MeterSequence
 {
 public:
     std::vector<MeasureSpec> measures;
@@ -54,7 +56,7 @@ struct Preset
     MeterSequence sequence;
 };
 
-class PresetLibrary
+class POLYMETRONOME_API PresetLibrary
 {
 public:
     static const std::vector<Preset>& all();

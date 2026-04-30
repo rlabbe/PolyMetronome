@@ -2,6 +2,7 @@
 
 #include "meter.h"
 #include "poly_metronome.h"
+#include "poly_metronome_export.h"
 
 #include <QDialog>
 
@@ -12,7 +13,7 @@ class QSlider;
 class PolyMetronome;
 class MeterSequenceWidget;
 
-class PolyMetronomeDialog : public QDialog
+class POLYMETRONOME_API PolyMetronomeDialog : public QDialog
 {
     Q_OBJECT
 

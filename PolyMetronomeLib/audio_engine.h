@@ -81,4 +81,5 @@ private:
     float master_volume_ = 1.0f;
     bool mono_mode_ = true;
     std::array<float, NumTypes> volumes_ = { { 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f } };
+    uint32_t dither_state_ = 0x12345678u;
 };

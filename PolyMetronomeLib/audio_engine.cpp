@@ -261,8 +261,15 @@ qint64 AudioEngine::readData(char* data, qint64 max_len)
     });
 
     float master = master_volume_;
+    // Inject ~1 LSB (Int16) of dither noise so the output is never bit-exact
+    // silent. Some audio drivers mute the line when they see digital zeros
+    // for too long; clicks at low BPM would then be eaten by the un-mute
+    // latency. ~-90dB below full scale, inaudible.
+    constexpr float dither_amp = 1.0f / 32768.0f;
     for (qint64 i = 0; i < n_frames; ++i) {
-        float v = scratch_[static_cast<size_t>(i)] * master;
+        dither_state_ = dither_state_ * 1664525u + 1013904223u;
+        float n = (static_cast<float>(static_cast<int32_t>(dither_state_)) / 2147483648.0f) * dither_amp;
+        float v = scratch_[static_cast<size_t>(i)] * master + n;
         if (v > 1.0f)
             v = 1.0f;
         else if (v < -1.0f)

@@ -11,6 +11,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="meter.h" />
+    <ClInclude Include="poly_metronome_export.h" />
     <QtMoc Include="audio_engine.h" />
     <QtMoc Include="meter_card.h" />
     <QtMoc Include="meter_edit_dialog.h" />

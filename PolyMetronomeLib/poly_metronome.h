@@ -1,13 +1,14 @@
 #pragma once
 
 #include "meter.h"
+#include "poly_metronome_export.h"
 
 #include <QJsonObject>
 #include <QObject>
 
 class AudioEngine;
 
-struct PolyMetronomeState
+struct POLYMETRONOME_API PolyMetronomeState
 {
     int bpm = 60;
     float master_volume = 0.8f;
@@ -24,7 +25,7 @@ struct PolyMetronomeState
     static PolyMetronomeState from_json(const QJsonObject& obj);
 };
 
-class PolyMetronome : public QObject
+class POLYMETRONOME_API PolyMetronome : public QObject
 {
     Q_OBJECT
 
