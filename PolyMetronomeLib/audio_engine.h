@@ -18,7 +18,7 @@ public:
     enum ClickType : int
     {
         Accent = 0,
-        Quarter,
+        Beat,
         Eighth,
         Sixteenth,
         Triplet,
@@ -60,6 +60,7 @@ private:
     void rebuild_click_samples();
     void recompute_sps_locked();
     const MeasureSpec& current_measure_locked() const;
+    bool is_group_boundary_locked(int beat_in_measure) const;
 
     QAudioSink* sink_ = nullptr;
     QAudioFormat format_;
@@ -82,4 +83,5 @@ private:
     bool mono_mode_ = true;
     std::array<float, NumTypes> volumes_ = { { 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f } };
     uint32_t dither_state_ = 0x12345678u;
+    double keepalive_phase_ = 0.0;
 };

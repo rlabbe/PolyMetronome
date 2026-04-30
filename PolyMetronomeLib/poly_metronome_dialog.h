@@ -35,7 +35,7 @@ private slots:
     void on_start_stop_clicked();
     void on_bpm_changed(int bpm);
     void on_master_volume_changed(int v);
-    void on_quarter_volume_changed(int v);
+    void on_beat_volume_changed(int v);
     void on_eighth_volume_changed(int v);
     void on_sixteenth_volume_changed(int v);
     void on_triplet_volume_changed(int v);
@@ -50,7 +50,7 @@ private:
     QDial* bpm_dial_ = nullptr;
     QLabel* bpm_label_ = nullptr;
     QSlider* master_volume_ = nullptr;
-    QSlider* quarter_volume_ = nullptr;
+    QSlider* beat_volume_ = nullptr;
     QSlider* eighth_volume_ = nullptr;
     QSlider* sixteenth_volume_ = nullptr;
     QSlider* triplet_volume_ = nullptr;

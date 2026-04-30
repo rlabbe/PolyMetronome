@@ -119,9 +119,7 @@ void MeterSequenceWidget::on_card_clicked(int index)
     if (index < 0 || index >= static_cast<int>(sequence_.measures.size()))
         return;
     bool can_delete = sequence_.measures.size() > 1;
-    bool can_move_left = index > 0;
-    bool can_move_right = index < static_cast<int>(sequence_.measures.size()) - 1;
-    MeterEditDialog dlg(sequence_.measures[index], can_delete, can_move_left, can_move_right, this);
+    MeterEditDialog dlg(sequence_.measures[index], can_delete, this);
     if (dlg.exec() == QDialog::Accepted) {
         switch (dlg.action()) {
         case MeterEditDialog::ActionAccept:
@@ -130,14 +128,6 @@ void MeterSequenceWidget::on_card_clicked(int index)
         case MeterEditDialog::ActionDelete:
             if (sequence_.measures.size() > 1)
                 sequence_.measures.erase(sequence_.measures.begin() + index);
-            break;
-        case MeterEditDialog::ActionMoveLeft:
-            if (index > 0)
-                std::swap(sequence_.measures[index - 1], sequence_.measures[index]);
-            break;
-        case MeterEditDialog::ActionMoveRight:
-            if (index + 1 < static_cast<int>(sequence_.measures.size()))
-                std::swap(sequence_.measures[index], sequence_.measures[index + 1]);
             break;
         default:
             break;

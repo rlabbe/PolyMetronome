@@ -30,15 +30,43 @@ PolyMetronomeDialog::PolyMetronomeDialog(QWidget* parent)
     bpm_dial_->setRange(30, 240);
     bpm_dial_->setValue(60);
     bpm_dial_->setNotchesVisible(true);
-    bpm_dial_->setMinimumSize(120, 120);
+    bpm_dial_->setFixedSize(160, 160);
     bpm_label_ = new QLabel("60", this);
     bpm_label_->setAlignment(Qt::AlignHCenter);
+    QFont bpm_label_font = bpm_label_->font();
+    bpm_label_font.setPointSize(bpm_label_font.pointSize() + 6);
+    bpm_label_font.setBold(true);
+    bpm_label_->setFont(bpm_label_font);
+
+    auto* bpm_dec = new QPushButton(QStringLiteral("−"), this);
+    auto* bpm_inc = new QPushButton(QStringLiteral("+"), this);
+    bpm_dec->setAutoRepeat(true);
+    bpm_inc->setAutoRepeat(true);
+    bpm_dec->setFixedSize(48, 48);
+    bpm_inc->setFixedSize(48, 48);
+    QFont bpm_btn_font = bpm_dec->font();
+    bpm_btn_font.setPointSize(bpm_btn_font.pointSize() + 4);
+    bpm_btn_font.setBold(true);
+    bpm_dec->setFont(bpm_btn_font);
+    bpm_inc->setFont(bpm_btn_font);
+    connect(bpm_dec, &QPushButton::clicked, this, [this]() {
+        bpm_dial_->setValue(bpm_dial_->value() - 1);
+    });
+    connect(bpm_inc, &QPushButton::clicked, this, [this]() {
+        bpm_dial_->setValue(bpm_dial_->value() + 1);
+    });
 
     auto* bpm_row = new QWidget(this);
     auto* bpm_v = new QVBoxLayout(bpm_row);
     bpm_v->setContentsMargins(0, 0, 0, 0);
     bpm_v->addWidget(bpm_label_);
-    bpm_v->addWidget(bpm_dial_, 0, Qt::AlignHCenter);
+    auto* dial_row = new QHBoxLayout;
+    dial_row->addStretch();
+    dial_row->addWidget(bpm_dec);
+    dial_row->addWidget(bpm_dial_);
+    dial_row->addWidget(bpm_inc);
+    dial_row->addStretch();
+    bpm_v->addLayout(dial_row);
     form->addRow(bpm_row);
 
     auto make_slider = [this](int default_pct) {
@@ -48,7 +76,7 @@ PolyMetronomeDialog::PolyMetronomeDialog(QWidget* parent)
         return s;
     };
 
-    quarter_volume_ = make_slider(100);
+    beat_volume_ = make_slider(100);
     eighth_volume_ = make_slider(0);
     sixteenth_volume_ = make_slider(0);
     triplet_volume_ = make_slider(0);
@@ -56,7 +84,7 @@ PolyMetronomeDialog::PolyMetronomeDialog(QWidget* parent)
     accent_volume_ = make_slider(0);
     master_volume_ = make_slider(80);
 
-    form->addRow("Quarter", quarter_volume_);
+    form->addRow("Beat", beat_volume_);
     form->addRow("Eighth", eighth_volume_);
     form->addRow("Sixteenth", sixteenth_volume_);
     form->addRow("Triplet", triplet_volume_);
@@ -77,7 +105,7 @@ PolyMetronomeDialog::PolyMetronomeDialog(QWidget* parent)
     connect(meter_widget_, &MeterSequenceWidget::sequence_changed, this, &PolyMetronomeDialog::on_sequence_changed);
     connect(bpm_dial_, &QDial::valueChanged, this, &PolyMetronomeDialog::on_bpm_changed);
     connect(master_volume_, &QSlider::valueChanged, this, &PolyMetronomeDialog::on_master_volume_changed);
-    connect(quarter_volume_, &QSlider::valueChanged, this, &PolyMetronomeDialog::on_quarter_volume_changed);
+    connect(beat_volume_, &QSlider::valueChanged, this, &PolyMetronomeDialog::on_beat_volume_changed);
     connect(eighth_volume_, &QSlider::valueChanged, this, &PolyMetronomeDialog::on_eighth_volume_changed);
     connect(sixteenth_volume_, &QSlider::valueChanged, this, &PolyMetronomeDialog::on_sixteenth_volume_changed);
     connect(triplet_volume_, &QSlider::valueChanged, this, &PolyMetronomeDialog::on_triplet_volume_changed);
@@ -89,7 +117,7 @@ PolyMetronomeDialog::PolyMetronomeDialog(QWidget* parent)
     on_sequence_changed(meter_widget_->sequence());
     on_bpm_changed(bpm_dial_->value());
     on_master_volume_changed(master_volume_->value());
-    on_quarter_volume_changed(quarter_volume_->value());
+    on_beat_volume_changed(beat_volume_->value());
     on_eighth_volume_changed(eighth_volume_->value());
     on_sixteenth_volume_changed(sixteenth_volume_->value());
     on_triplet_volume_changed(triplet_volume_->value());
@@ -114,7 +142,7 @@ PolyMetronomeState PolyMetronomeDialog::state() const
     s.bpm = bpm_dial_->value();
     s.master_volume = master_volume_->value() / 100.0f;
     s.accent_volume = accent_volume_->value() / 100.0f;
-    s.quarter_volume = quarter_volume_->value() / 100.0f;
+    s.beat_volume = beat_volume_->value() / 100.0f;
     s.eighth_volume = eighth_volume_->value() / 100.0f;
     s.sixteenth_volume = sixteenth_volume_->value() / 100.0f;
     s.triplet_volume = triplet_volume_->value() / 100.0f;
@@ -130,7 +158,7 @@ void PolyMetronomeDialog::apply_state(const PolyMetronomeState& s)
         QSignalBlocker b1(bpm_dial_);
         QSignalBlocker b2(master_volume_);
         QSignalBlocker b3(accent_volume_);
-        QSignalBlocker b4(quarter_volume_);
+        QSignalBlocker b4(beat_volume_);
         QSignalBlocker b5(eighth_volume_);
         QSignalBlocker b6(sixteenth_volume_);
         QSignalBlocker b7(triplet_volume_);
@@ -141,7 +169,7 @@ void PolyMetronomeDialog::apply_state(const PolyMetronomeState& s)
         bpm_dial_->setValue(s.bpm);
         master_volume_->setValue(static_cast<int>(s.master_volume * 100.0f));
         accent_volume_->setValue(static_cast<int>(s.accent_volume * 100.0f));
-        quarter_volume_->setValue(static_cast<int>(s.quarter_volume * 100.0f));
+        beat_volume_->setValue(static_cast<int>(s.beat_volume * 100.0f));
         eighth_volume_->setValue(static_cast<int>(s.eighth_volume * 100.0f));
         sixteenth_volume_->setValue(static_cast<int>(s.sixteenth_volume * 100.0f));
         triplet_volume_->setValue(static_cast<int>(s.triplet_volume * 100.0f));
@@ -156,7 +184,7 @@ void PolyMetronomeDialog::apply_state(const PolyMetronomeState& s)
     metronome_->set_bpm(s.bpm);
     metronome_->set_master_volume(s.master_volume);
     metronome_->set_accent_volume(s.accent_volume);
-    metronome_->set_quarter_volume(s.quarter_volume);
+    metronome_->set_beat_volume(s.beat_volume);
     metronome_->set_eighth_volume(s.eighth_volume);
     metronome_->set_sixteenth_volume(s.sixteenth_volume);
     metronome_->set_triplet_volume(s.triplet_volume);
@@ -208,9 +236,9 @@ void PolyMetronomeDialog::on_master_volume_changed(int v)
     emit state_changed();
 }
 
-void PolyMetronomeDialog::on_quarter_volume_changed(int v)
+void PolyMetronomeDialog::on_beat_volume_changed(int v)
 {
-    metronome_->set_quarter_volume(v / 100.0f);
+    metronome_->set_beat_volume(v / 100.0f);
     emit state_changed();
 }
 

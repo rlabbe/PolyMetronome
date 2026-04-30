@@ -3,11 +3,44 @@
 #include "meter.h"
 
 #include <QDialog>
+#include <QWidget>
 
-class QSpinBox;
-class QComboBox;
+class QButtonGroup;
 class QLineEdit;
 class QPushButton;
+
+class StepperEdit : public QWidget
+{
+    Q_OBJECT
+
+public:
+    explicit StepperEdit(QWidget* parent = nullptr);
+
+    void set_range(int min_v, int max_v);
+    int value() const { return value_; }
+    void set_value(int v);
+    QLineEdit* line_edit() const { return edit_; }
+    void set_field_height(int h);
+    void set_font_for_field(const QFont& f);
+
+signals:
+    void value_changed(int v);
+
+private slots:
+    void on_dec();
+    void on_inc();
+    void on_text_edited(const QString& text);
+
+private:
+    void apply(int v, bool emit_signal);
+
+    QPushButton* dec_btn_ = nullptr;
+    QPushButton* inc_btn_ = nullptr;
+    QLineEdit* edit_ = nullptr;
+    int min_ = 0;
+    int max_ = 99;
+    int value_ = 0;
+};
 
 class MeterEditDialog : public QDialog
 {
@@ -18,12 +51,10 @@ public:
     {
         ActionNone,
         ActionAccept,
-        ActionDelete,
-        ActionMoveLeft,
-        ActionMoveRight
+        ActionDelete
     };
 
-    MeterEditDialog(const MeasureSpec& spec, bool can_delete, bool can_move_left, bool can_move_right, QWidget* parent = nullptr);
+    MeterEditDialog(const MeasureSpec& spec, bool can_delete, QWidget* parent = nullptr);
 
     MeasureSpec measure() const;
     Action action() const { return action_; }
@@ -31,21 +62,19 @@ public:
 private slots:
     void on_accept();
     void on_delete();
-    void on_move_left();
-    void on_move_right();
     void on_grouping_text_changed();
-    void on_numerator_changed();
+    void on_beats_changed(int);
+    void on_note_value_clicked(int id);
 
 private:
-    void update_grouping_validity();
+    void update_validity();
+    int current_note_value() const;
 
-    QSpinBox* numerator_ = nullptr;
-    QComboBox* denominator_ = nullptr;
-    QSpinBox* repeat_ = nullptr;
+    StepperEdit* beats_ = nullptr;
+    QButtonGroup* note_value_group_ = nullptr;
+    StepperEdit* repeat_ = nullptr;
     QLineEdit* grouping_ = nullptr;
     QPushButton* ok_btn_ = nullptr;
     QPushButton* delete_btn_ = nullptr;
-    QPushButton* move_left_btn_ = nullptr;
-    QPushButton* move_right_btn_ = nullptr;
     Action action_ = ActionNone;
 };

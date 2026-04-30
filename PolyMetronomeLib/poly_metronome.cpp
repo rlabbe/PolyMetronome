@@ -8,7 +8,7 @@ QJsonObject PolyMetronomeState::to_json() const
     obj["bpm"] = bpm;
     obj["master_volume"] = master_volume;
     obj["accent_volume"] = accent_volume;
-    obj["quarter_volume"] = quarter_volume;
+    obj["beat_volume"] = beat_volume;
     obj["eighth_volume"] = eighth_volume;
     obj["sixteenth_volume"] = sixteenth_volume;
     obj["triplet_volume"] = triplet_volume;
@@ -24,7 +24,10 @@ PolyMetronomeState PolyMetronomeState::from_json(const QJsonObject& obj)
     s.bpm = obj.value("bpm").toInt(60);
     s.master_volume = static_cast<float>(obj.value("master_volume").toDouble(0.8));
     s.accent_volume = static_cast<float>(obj.value("accent_volume").toDouble(0.0));
-    s.quarter_volume = static_cast<float>(obj.value("quarter_volume").toDouble(1.0));
+    if (obj.contains("beat_volume"))
+        s.beat_volume = static_cast<float>(obj.value("beat_volume").toDouble(1.0));
+    else
+        s.beat_volume = static_cast<float>(obj.value("quarter_volume").toDouble(1.0));
     s.eighth_volume = static_cast<float>(obj.value("eighth_volume").toDouble(0.0));
     s.sixteenth_volume = static_cast<float>(obj.value("sixteenth_volume").toDouble(0.0));
     s.triplet_volume = static_cast<float>(obj.value("triplet_volume").toDouble(0.0));
@@ -68,9 +71,9 @@ void PolyMetronome::set_master_volume(float v)
     audio_->set_master_volume(v);
 }
 
-void PolyMetronome::set_quarter_volume(float v)
+void PolyMetronome::set_beat_volume(float v)
 {
-    audio_->set_volume(AudioEngine::Quarter, v);
+    audio_->set_volume(AudioEngine::Beat, v);
 }
 
 void PolyMetronome::set_eighth_volume(float v)
