@@ -1,5 +1,6 @@
 #include "poly_metronome_dialog.h"
 
+#include "beat_meter_widget.h"
 #include "count_in_card.h"
 #include "meter_sequence_widget.h"
 #include "poly_metronome.h"
@@ -71,7 +72,15 @@ PolyMetronomeDialog::PolyMetronomeDialog(QWidget* parent)
     dial_row->addWidget(bpm_inc);
     dial_row->addStretch();
     bpm_v->addLayout(dial_row);
-    form->addRow(bpm_row);
+
+    beat_meter_ = new BeatMeterWidget(this);
+    beat_meter_->set_bpm(bpm_dial_->value());
+
+    auto* bpm_section = new QHBoxLayout;
+    bpm_section->setSpacing(8);
+    bpm_section->addWidget(bpm_row);
+    bpm_section->addWidget(beat_meter_);
+    form->addRow(bpm_section);
 
     auto make_slider = [this](int default_pct) {
         auto* s = new QSlider(Qt::Horizontal, this);
@@ -137,7 +146,6 @@ PolyMetronomeDialog::PolyMetronomeDialog(QWidget* parent)
 
     adjustSize();
     setFixedHeight(height());
-    resize(width() + 120, height());
 }
 
 PolyMetronomeDialog::~PolyMetronomeDialog()
@@ -211,6 +219,7 @@ void PolyMetronomeDialog::closeEvent(QCloseEvent* event)
     if (metronome_->is_running()) {
         metronome_->stop();
         start_stop_->setText("Start");
+        beat_meter_->set_running(false);
     }
     QDialog::closeEvent(event);
 }
@@ -220,6 +229,7 @@ void PolyMetronomeDialog::hideEvent(QHideEvent* event)
     if (metronome_->is_running()) {
         metronome_->stop();
         start_stop_->setText("Start");
+        beat_meter_->set_running(false);
     }
     QDialog::hideEvent(event);
 }
@@ -229,11 +239,13 @@ void PolyMetronomeDialog::on_start_stop_clicked()
     if (metronome_->is_running()) {
         metronome_->stop();
         start_stop_->setText("Start");
+        beat_meter_->set_running(false);
     }
     else {
         metronome_->set_count_in(count_in_->value());
         metronome_->start();
         start_stop_->setText("Stop");
+        beat_meter_->set_running(true);
     }
 }
 
@@ -241,6 +253,7 @@ void PolyMetronomeDialog::on_bpm_changed(int bpm)
 {
     metronome_->set_bpm(bpm);
     bpm_label_->setText(QString::number(bpm));
+    beat_meter_->set_bpm(bpm);
     emit state_changed();
 }
 

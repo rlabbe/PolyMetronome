@@ -13,6 +13,7 @@ class QSlider;
 class PolyMetronome;
 class MeterSequenceWidget;
 class CountInCard;
+class BeatMeterWidget;
 
 class POLYMETRONOME_API PolyMetronomeDialog : public QDialog
 {
@@ -60,4 +61,5 @@ private:
     QPushButton* sound_mode_button_ = nullptr;
     QPushButton* start_stop_ = nullptr;
     CountInCard* count_in_ = nullptr;
+    BeatMeterWidget* beat_meter_ = nullptr;
 };

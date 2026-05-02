@@ -159,8 +159,6 @@ const std::vector<Preset>& PresetLibrary::all()
         v.push_back({ "Take Five (5/4)", MeterSequence({ make(5, 4) }) });
         v.push_back({ "9/8 (3+3+3)", MeterSequence({ make(9, 8, { 3, 3, 3 }) }) });
         v.push_back({ "11/8 (3+3+3+2)", MeterSequence({ make(11, 8, { 3, 3, 3, 2 }) }) });
-        v.push_back({ "5/8 then 3/4", MeterSequence({ make(5, 8, { 2, 3 }), make(3, 4) }) });
-        v.push_back({ "3x 7/8 + 2x 4/4", MeterSequence({ make(7, 8, { 2, 2, 3 }, 3), make(4, 4, {}, 2) }) });
         return v;
     }();
     return presets;
