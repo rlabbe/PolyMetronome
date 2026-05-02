@@ -132,6 +132,7 @@ PolyMetronomeDialog::PolyMetronomeDialog(QWidget* parent)
     connect(sound_mode_button_, &QPushButton::toggled, this, &PolyMetronomeDialog::on_sound_mode_toggled);
     connect(start_stop_, &QPushButton::clicked, this, &PolyMetronomeDialog::on_start_stop_clicked);
     connect(count_in_, &CountInCard::value_changed, this, [this](int) { emit state_changed(); });
+    connect(metronome_, &PolyMetronome::beat_tick, beat_meter_, &BeatMeterWidget::on_beat_tick);
 
     on_sequence_changed(meter_widget_->sequence());
     on_bpm_changed(bpm_dial_->value());
@@ -242,10 +243,10 @@ void PolyMetronomeDialog::on_start_stop_clicked()
         beat_meter_->set_running(false);
     }
     else {
+        beat_meter_->set_running(true);
         metronome_->set_count_in(count_in_->value());
         metronome_->start();
         start_stop_->setText("Stop");
-        beat_meter_->set_running(true);
     }
 }
 
@@ -302,6 +303,9 @@ void PolyMetronomeDialog::on_accent_volume_changed(int v)
 void PolyMetronomeDialog::on_sequence_changed(const MeterSequence& seq)
 {
     metronome_->set_sequence(seq);
+    beat_meter_->set_sequence(seq);
+    adjustSize();
+    setFixedHeight(height());
     emit state_changed();
 }
 

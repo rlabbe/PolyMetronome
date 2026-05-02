@@ -260,6 +260,7 @@ qint64 AudioEngine::readData(char* data, qint64 max_len)
             //   20, 40      : triplet offbeats (3 per beat)
             //   12,24,36,48 : quintuplet offbeats (5 per beat)
             if (sub_in_beat == 0) {
+                emit beat_tick(seq_measure_idx_, beat_in_measure);
                 schedule(spos, Beat);
                 if (beat_in_measure == 0)
                     schedule(spos, Accent);

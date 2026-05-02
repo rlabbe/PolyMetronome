@@ -43,6 +43,9 @@ public:
     bool isSequential() const override { return true; }
     qint64 bytesAvailable() const override;
 
+signals:
+    void beat_tick(int measure_index, int beat_within_measure);
+
 protected:
     qint64 readData(char* data, qint64 max_len) override;
     qint64 writeData(const char* data, qint64 len) override;

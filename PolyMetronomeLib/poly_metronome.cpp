@@ -44,6 +44,7 @@ PolyMetronome::PolyMetronome(QObject* parent)
     : QObject(parent)
     , audio_(new AudioEngine(this))
 {
+    connect(audio_, &AudioEngine::beat_tick, this, &PolyMetronome::beat_tick);
 }
 
 PolyMetronome::~PolyMetronome() = default;
