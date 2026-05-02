@@ -10,13 +10,18 @@
 #include <QPixmap>
 #include <algorithm>
 
+static constexpr int kCardSize = 80;
+static constexpr int kArrowW = 14;
+static constexpr float kAW = 8.0f;
+static constexpr float kAH = 6.0f;
+
 MeterCard::MeterCard(QWidget* parent)
     : QWidget(parent)
 {
     setMouseTracking(true);
     setCursor(Qt::PointingHandCursor);
-    setMinimumSize(70, 70);
-    setMaximumSize(70, 70);
+    setMinimumSize(kCardSize, kCardSize);
+    setMaximumSize(kCardSize, kCardSize);
 }
 
 void MeterCard::set_measure(const MeasureSpec& m)
@@ -27,7 +32,36 @@ void MeterCard::set_measure(const MeasureSpec& m)
 
 QSize MeterCard::sizeHint() const
 {
-    return QSize(70, 70);
+    return QSize(kCardSize, kCardSize);
+}
+
+MeterCard::Zone MeterCard::zone_at(QPoint p) const
+{
+    if (p.x() < width() - kArrowW)
+        return Zone::None;
+    QFont big = font();
+    big.setPointSize(big.pointSize() + 8);
+    big.setBold(true);
+    int nth = QFontMetrics(big).height();
+    int line_y = (height() - 4) / 2 + 2;   // r.center().y()
+    int ncy = line_y - nth / 2;
+    int dcy = line_y + nth / 2;
+    if (p.y() < line_y)
+        return p.y() < ncy ? Zone::NumUp : Zone::NumDown;
+    else
+        return p.y() < dcy ? Zone::DenUp : Zone::DenDown;
+}
+
+void MeterCard::draw_arrow(QPainter& p, QPointF tip, bool up, QColor color)
+{
+    QPolygonF tri;
+    if (up)
+        tri << tip << QPointF(tip.x() - kAW / 2, tip.y() + kAH) << QPointF(tip.x() + kAW / 2, tip.y() + kAH);
+    else
+        tri << tip << QPointF(tip.x() - kAW / 2, tip.y() - kAH) << QPointF(tip.x() + kAW / 2, tip.y() - kAH);
+    p.setPen(Qt::NoPen);
+    p.setBrush(color);
+    p.drawPolygon(tri);
 }
 
 void MeterCard::paintEvent(QPaintEvent*)
@@ -43,24 +77,27 @@ void MeterCard::paintEvent(QPaintEvent*)
     p.setBrush(bg);
     p.drawRoundedRect(r, 5, 5);
 
+    // Number area excludes arrow strip
+    QRectF nr = r.adjusted(0, 0, -kArrowW, 0);
+
     QFont big = font();
     big.setPointSize(big.pointSize() + 8);
     big.setBold(true);
     p.setFont(big);
 
     QFontMetrics fm(big);
-    int line_y = static_cast<int>(r.center().y());
     int num_text_h = fm.height();
+    int line_y = static_cast<int>(r.center().y());
 
     p.setPen(QColor(230, 230, 235));
-    p.drawText(QRect(static_cast<int>(r.left()), line_y - num_text_h - 1, static_cast<int>(r.width()), num_text_h),
+    p.drawText(QRect(static_cast<int>(nr.left()), line_y - num_text_h - 1, static_cast<int>(nr.width()), num_text_h),
                Qt::AlignHCenter | Qt::AlignBottom, QString::number(measure_.numerator));
 
     p.setPen(QPen(QColor(180, 185, 195), 1.5));
-    p.drawLine(QPointF(r.left() + 14, line_y), QPointF(r.right() - 14, line_y));
+    p.drawLine(QPointF(nr.left() + 14, line_y), QPointF(nr.right() - 14, line_y));
 
     p.setPen(QColor(230, 230, 235));
-    p.drawText(QRect(static_cast<int>(r.left()), line_y + 1, static_cast<int>(r.width()), num_text_h),
+    p.drawText(QRect(static_cast<int>(nr.left()), line_y + 1, static_cast<int>(nr.width()), num_text_h),
                Qt::AlignHCenter | Qt::AlignTop, QString::number(measure_.denominator));
 
     if (measure_.repeat > 1) {
@@ -69,16 +106,16 @@ void MeterCard::paintEvent(QPaintEvent*)
         p.setFont(small);
         p.setPen(QColor(210, 210, 215));
         QString rep_text = QString("×") + QString::number(measure_.repeat);
-        p.drawText(QRect(static_cast<int>(r.right() - 28), static_cast<int>(r.top() + 4), 24, 14),
+        p.drawText(QRect(static_cast<int>(nr.left()), static_cast<int>(r.top() + 3), static_cast<int>(nr.width()), 14),
                    Qt::AlignRight | Qt::AlignTop, rep_text);
     }
 
     if (!measure_.grouping.is_empty() && measure_.numerator > 0) {
         int n = measure_.numerator;
-        int avail = static_cast<int>(r.width()) - 18;
-        int dot_y = static_cast<int>(r.bottom()) - 10;
+        int avail = static_cast<int>(nr.width()) - 10;
+        int dot_y = static_cast<int>(r.bottom()) - 8;
         int spacing = std::max(1, avail / std::max(1, n));
-        int start_x = static_cast<int>(r.left()) + 9 + spacing / 2;
+        int start_x = static_cast<int>(nr.left()) + 5 + spacing / 2;
         int group_idx = 0;
         int in_group = 0;
         for (int i = 0; i < n; ++i) {
@@ -96,6 +133,19 @@ void MeterCard::paintEvent(QPaintEvent*)
             }
         }
     }
+
+    // Arrow strip — aligned to text centers
+    auto arrow_color = [&](Zone z) {
+        return hover_zone_ == z ? QColor(200, 220, 255) : QColor(110, 115, 130);
+    };
+    float ax  = static_cast<float>(r.right()) - kArrowW / 2.0f;
+    float ncy = static_cast<float>(line_y - num_text_h / 2);   // numerator text center
+    float dcy = static_cast<float>(line_y + num_text_h / 2);   // denominator text center
+
+    draw_arrow(p, QPointF(ax, ncy - 9), true,  arrow_color(Zone::NumUp));
+    draw_arrow(p, QPointF(ax, ncy + 9), false, arrow_color(Zone::NumDown));
+    draw_arrow(p, QPointF(ax, dcy - 9), true,  arrow_color(Zone::DenUp));
+    draw_arrow(p, QPointF(ax, dcy + 9), false, arrow_color(Zone::DenDown));
 }
 
 void MeterCard::mousePressEvent(QMouseEvent* e)
@@ -106,8 +156,17 @@ void MeterCard::mousePressEvent(QMouseEvent* e)
 
 void MeterCard::mouseMoveEvent(QMouseEvent* e)
 {
-    if (!(e->buttons() & (Qt::LeftButton | Qt::RightButton)))
+    // Update arrow hover
+    if (!(e->buttons() & (Qt::LeftButton | Qt::RightButton))) {
+        Zone z = zone_at(e->pos());
+        if (z != hover_zone_) {
+            hover_zone_ = z;
+            update();
+        }
         return;
+    }
+
+    // Drag
     if ((e->pos() - press_pos_).manhattanLength() < QApplication::startDragDistance())
         return;
     if (index_ < 0)
@@ -124,7 +183,40 @@ void MeterCard::mouseMoveEvent(QMouseEvent* e)
 
 void MeterCard::mouseReleaseEvent(QMouseEvent* e)
 {
-    if (e->button() == Qt::LeftButton || e->button() == Qt::RightButton)
+    if (e->button() != Qt::LeftButton)
+        return;
+
+    static const int denoms[] = { 1, 2, 4, 8, 16, 32 };
+    static constexpr int ndenom = 6;
+
+    Zone z = zone_at(press_pos_);
+    switch (z) {
+    case Zone::NumUp:
+        measure_.numerator = std::min(32, measure_.numerator + 1);
+        update();
+        emit measure_changed(measure_);
+        return;
+    case Zone::NumDown:
+        measure_.numerator = std::max(1, measure_.numerator - 1);
+        update();
+        emit measure_changed(measure_);
+        return;
+    case Zone::DenUp:
+    case Zone::DenDown: {
+        int idx = 0;
+        for (int i = 0; i < ndenom; ++i)
+            if (denoms[i] == measure_.denominator) { idx = i; break; }
+        idx = z == Zone::DenUp ? std::min(ndenom - 1, idx + 1) : std::max(0, idx - 1);
+        measure_.denominator = denoms[idx];
+        update();
+        emit measure_changed(measure_);
+        return;
+    }
+    default:
+        break;
+    }
+
+    if ((e->pos() - press_pos_).manhattanLength() < QApplication::startDragDistance())
         emit clicked();
 }
 
@@ -137,5 +229,6 @@ void MeterCard::enterEvent(QEnterEvent*)
 void MeterCard::leaveEvent(QEvent*)
 {
     hovered_ = false;
+    hover_zone_ = Zone::None;
     update();
 }

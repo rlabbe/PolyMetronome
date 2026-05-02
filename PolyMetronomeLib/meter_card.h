@@ -22,6 +22,7 @@ public:
 
 signals:
     void clicked();
+    void measure_changed(const MeasureSpec& m);
 
 protected:
     void paintEvent(QPaintEvent*) override;
@@ -32,8 +33,13 @@ protected:
     void leaveEvent(QEvent* e) override;
 
 private:
+    enum class Zone { None, NumUp, NumDown, DenUp, DenDown };
+    Zone zone_at(QPoint p) const;
+    void draw_arrow(QPainter& p, QPointF tip, bool up, QColor color);
+
     MeasureSpec measure_;
     bool hovered_ = false;
+    Zone hover_zone_ = Zone::None;
     int index_ = -1;
     QPoint press_pos_;
 };

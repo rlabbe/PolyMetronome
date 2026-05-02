@@ -20,11 +20,15 @@ signals:
 protected:
     void paintEvent(QPaintEvent*) override;
     void mousePressEvent(QMouseEvent* e) override;
+    void mouseMoveEvent(QMouseEvent* e) override;
     void wheelEvent(QWheelEvent* e) override;
     void enterEvent(QEnterEvent* e) override;
     void leaveEvent(QEvent* e) override;
 
 private:
+    enum class Zone { None, Up, Down };
+    Zone zone_at(QPoint p) const;
+
     int value_ = 0;
-    bool hovered_ = false;
+    Zone hover_zone_ = Zone::None;
 };

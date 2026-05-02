@@ -41,7 +41,7 @@ MeterSequenceWidget::MeterSequenceWidget(QWidget* parent)
     scroll_->setWidgetResizable(true);
     scroll_->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
     scroll_->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
-    scroll_->setFixedHeight(90);
+    scroll_->setFixedHeight(100);
     scroll_->setFrameShape(QFrame::NoFrame);
 
     cards_container_ = new QWidget;
@@ -104,12 +104,18 @@ void MeterSequenceWidget::rebuild_cards()
         card->set_index(static_cast<int>(i));
         int captured_index = static_cast<int>(i);
         connect(card, &MeterCard::clicked, this, [this, captured_index]() { on_card_clicked(captured_index); });
+        connect(card, &MeterCard::measure_changed, this, [this, captured_index](const MeasureSpec& m) {
+            if (captured_index < static_cast<int>(sequence_.measures.size())) {
+                sequence_.measures[captured_index] = m;
+                emit sequence_changed(sequence_);
+            }
+        });
         cards_layout_->addWidget(card);
         cards_.push_back(card);
     }
 
     add_btn_ = new QPushButton("+", cards_container_);
-    add_btn_->setFixedSize(50, 70);
+    add_btn_->setFixedSize(50, 80);
     QFont f = add_btn_->font();
     f.setPointSize(f.pointSize() + 6);
     f.setBold(true);
