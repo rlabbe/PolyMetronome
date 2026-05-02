@@ -111,11 +111,12 @@ void AudioEngine::start()
         QMutexLocker lock(&mutex_);
         active_clicks_.clear();
         position_samples_ = 0;
-        // Delay the first beat by ~50ms so the audio backend's pull pipeline
-        // is fully primed before any click is scheduled. Without this, on
-        // first start (after dialog open) WASAPI's startup buffering can
-        // produce a duplicate first click.
-        qint64 initial_offset = sample_rate_ / 20;
+        // Delay the first beat enough that the audio backend's pull pipeline
+        // is fully primed before any click is scheduled. 50 ms wasn't always
+        // enough on WASAPI — startup re-pulls produced duplicate clicks and
+        // split accent/beat across buffers. 250 ms is comfortably past any
+        // typical sink buffer and double-pull window.
+        qint64 initial_offset = sample_rate_ / 4;
         count_in_sps_ = static_cast<double>(sample_rate_) * 60.0 / (static_cast<double>(bpm_) * subs_per_beat_);
         count_in_anchor_ = initial_offset;
         count_in_subtick_ = 0;

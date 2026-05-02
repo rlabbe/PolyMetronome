@@ -3,6 +3,7 @@
 #include "meter.h"
 
 #include <QElapsedTimer>
+#include <QPixmap>
 #include <QWidget>
 
 class QTimer;
@@ -27,6 +28,9 @@ protected:
     void paintEvent(QPaintEvent*) override;
 
 private:
+    void build_static_cache();
+
+    QPixmap static_cache_;
     QTimer* frame_timer_;
     int bpm_ = 60;
     bool running_ = false;

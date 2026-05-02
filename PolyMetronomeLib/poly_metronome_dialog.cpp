@@ -304,8 +304,6 @@ void PolyMetronomeDialog::on_sequence_changed(const MeterSequence& seq)
 {
     metronome_->set_sequence(seq);
     beat_meter_->set_sequence(seq);
-    adjustSize();
-    setFixedHeight(height());
     emit state_changed();
 }
 

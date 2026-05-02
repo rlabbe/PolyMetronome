@@ -57,6 +57,7 @@ void BeatMeterWidget::set_sequence(const MeterSequence& seq)
     sequence_ = seq;
     active_measure_ = -1;
     active_beat_    = -1;
+    static_cache_   = QPixmap();   // invalidate
     setFixedSize(sizeHint());
     update();
 }
@@ -74,18 +75,42 @@ void BeatMeterWidget::on_beat_tick(int measure_index, int beat_within_measure)
 
 QSize BeatMeterWidget::sizeHint() const
 {
-    int n_rows = sequence_.measures.empty() ? 1 : static_cast<int>(sequence_.measures.size());
-    return QSize(kW, kNeedleH + kRowPad + n_rows * kRowH + kRowPad);
+    return QSize(kW, kNeedleH);
 }
 
-void BeatMeterWidget::paintEvent(QPaintEvent*)
+// Geometry shared by paintEvent and build_static_cache.
+namespace {
+struct Geom {
+    float cx, py, radius;
+    float led_gap, led_r;
+    float rows_top;
+};
+
+Geom compute_geom()
 {
-    QPainter p(this);
+    Geom g;
+    g.cx       = kW / 2.0f;
+    g.radius   = std::min(g.cx - 12.0f, 80.0f);
+    g.led_gap  = 14.0f;
+    g.led_r    = 5.0f;
+    float content_h = g.radius + g.led_gap + g.led_r;
+    g.py       = (kNeedleH - content_h) / 2.0f + g.radius;
+    g.rows_top = g.py + kRowPad;
+    return g;
+}
+}
+
+void BeatMeterWidget::build_static_cache()
+{
+    static_cache_ = QPixmap(size());
+    static_cache_.fill(Qt::transparent);
+
+    QPainter p(&static_cache_);
     p.setRenderHint(QPainter::Antialiasing);
 
     const QRectF r(0, 0, width(), height());
 
-    // ── Amber background ──────────────────────────────────────────────
+    // Amber background
     QLinearGradient bg(r.topLeft(), r.bottomLeft());
     bg.setColorAt(0.0, QColor(240, 195, 45));
     bg.setColorAt(1.0, QColor(195, 148, 18));
@@ -104,33 +129,11 @@ void BeatMeterWidget::paintEvent(QPaintEvent*)
     p.setBrush(Qt::NoBrush);
     p.drawRect(r.adjusted(1,1,-1,-1));
 
-    // ── Needle area geometry ──────────────────────────────────────────
-    int n_rows = sequence_.measures.empty() ? 1 : static_cast<int>(sequence_.measures.size());
+    const Geom g = compute_geom();
+    const QPointF pivot(g.cx, g.py);
 
-    const float cx      = kW / 2.0f;
-    const float radius  = std::min(cx - 12.0f, 80.0f);
-    const float led_gap = 14.0f;
-    const float led_r   = 5.0f;
-    const float content_h = radius + led_gap + led_r;
-    const float py      = (kNeedleH - content_h) / 2.0f + radius;
-
-    const QPointF pivot(cx, py);
-
-    // ── Needle angle (driven by beat_tick → in sync with LEDs/audio) ──
-    // phase clamps at 1 so the needle parks at the opposite extreme between
-    // beats instead of overshooting/wrapping.
-    float angle_deg = 0.0f;
-    if (running_) {
-        double beat_ms  = 60000.0 / bpm_;
-        double since_ms = static_cast<double>(elapsed_.elapsed() - last_beat_ms_);
-        double phase    = std::min(since_ms / beat_ms, 1.0);
-        double swing    = kMaxSwing * (1.0 - 2.0 * phase);   // linear: +max → -max
-        angle_deg       = static_cast<float>(needle_direction_ * swing);
-    }
-
-    // ── Scale arc ─────────────────────────────────────────────────────
-    QRectF arc_rect(cx - radius, py - radius, 2 * radius, 2 * radius);
-
+    // Scale arc filled chord
+    QRectF arc_rect(g.cx - g.radius, g.py - g.radius, 2 * g.radius, 2 * g.radius);
     QPainterPath chord;
     chord.moveTo(pivot);
     chord.arcTo(arc_rect, 0, 180);
@@ -139,10 +142,12 @@ void BeatMeterWidget::paintEvent(QPaintEvent*)
     p.setBrush(QColor(160, 120, 10, 50));
     p.drawPath(chord);
 
+    // Arc outline
     p.setPen(QPen(QColor(80, 52, 5), 1.5));
     p.setBrush(Qt::NoBrush);
     p.drawArc(arc_rect, 0, 180 * 16);
 
+    // Tick marks
     static const float kTickAngles[] = { -kMaxSwing, -kMaxSwing*0.66f, -kMaxSwing*0.33f,
                                           0,
                                           kMaxSwing*0.33f,  kMaxSwing*0.66f,  kMaxSwing };
@@ -151,18 +156,90 @@ void BeatMeterWidget::paintEvent(QPaintEvent*)
         float rad = (90.0f - tick_deg) * static_cast<float>(std::numbers::pi_v<double>) / 180.0f;
         bool is_center = (i == 3);
         float len = is_center ? 16.0f : 10.0f;
-        QPointF outer(cx + radius * std::cos(rad), py - radius * std::sin(rad));
-        QPointF inner(cx + (radius - len) * std::cos(rad),
-                      py - (radius - len) * std::sin(rad));
+        QPointF outer(g.cx + g.radius * std::cos(rad), g.py - g.radius * std::sin(rad));
+        QPointF inner(g.cx + (g.radius - len) * std::cos(rad),
+                      g.py - (g.radius - len) * std::sin(rad));
         p.setPen(QPen(QColor(70, 45, 5), is_center ? 2.0 : 1.0));
         p.drawLine(outer, inner);
     }
 
+    // Pivot cap
+    p.setBrush(QColor(55, 32, 5));
+    p.setPen(QPen(QColor(30, 15, 0), 1));
+    p.drawEllipse(pivot, 6.0, 6.0);
+    p.setBrush(QColor(130, 90, 20));
+    p.setPen(Qt::NoPen);
+    p.drawEllipse(pivot, 3.0, 3.0);
+
+    // LEDs in dark/off state
+    const QColor col_off(110, 38, 8);
+    int n_rows = sequence_.measures.empty() ? 0 : static_cast<int>(sequence_.measures.size());
+    for (int row = 0; row < n_rows; ++row) {
+        int n_beats  = sequence_.measures[row].numerator;
+        float row_cy = g.rows_top + row * kRowH + kRowH * 0.5f;
+        for (int b = 0; b < n_beats; ++b) {
+            float bx = 12.0f + (b + 0.5f) * (kW - 24.0f) / n_beats;
+            QRadialGradient grad(bx - g.led_r * 0.3f, row_cy - g.led_r * 0.3f, g.led_r * 1.2f);
+            grad.setColorAt(0, col_off.lighter(120));
+            grad.setColorAt(1, col_off);
+            p.setBrush(grad);
+            p.setPen(QPen(QColor(40, 15, 3), 1));
+            p.drawEllipse(QPointF(bx, row_cy), g.led_r, g.led_r);
+        }
+    }
+}
+
+void BeatMeterWidget::paintEvent(QPaintEvent*)
+{
+    if (static_cache_.size() != size())
+        build_static_cache();
+
+    QPainter p(this);
+    p.drawPixmap(0, 0, static_cache_);
+    p.setRenderHint(QPainter::Antialiasing);
+
+    const Geom g = compute_geom();
+    const QPointF pivot(g.cx, g.py);
+
+    // ── Lit LED overlay (only the active one, drawn over the cached dark one) ─
+    if (active_measure_ >= 0 && active_measure_ < static_cast<int>(sequence_.measures.size())
+        && active_beat_ >= 0)
+    {
+        const QColor col_on(255, 80, 15);
+        int n_beats = sequence_.measures[active_measure_].numerator;
+        if (active_beat_ < n_beats) {
+            float row_cy = g.rows_top + active_measure_ * kRowH + kRowH * 0.5f;
+            float bx     = 12.0f + (active_beat_ + 0.5f) * (kW - 24.0f) / n_beats;
+
+            QRadialGradient glow(bx, row_cy, g.led_r * 3.0f);
+            glow.setColorAt(0, QColor(255, 90, 10, 160));
+            glow.setColorAt(1, Qt::transparent);
+            p.setPen(Qt::NoPen);
+            p.setBrush(glow);
+            p.drawEllipse(QPointF(bx, row_cy), g.led_r * 3.0f, g.led_r * 3.0f);
+
+            QRadialGradient grad(bx - g.led_r * 0.3f, row_cy - g.led_r * 0.3f, g.led_r * 1.2f);
+            grad.setColorAt(0, col_on.lighter(160));
+            grad.setColorAt(1, col_on);
+            p.setBrush(grad);
+            p.setPen(QPen(QColor(40, 15, 3), 1));
+            p.drawEllipse(QPointF(bx, row_cy), g.led_r, g.led_r);
+        }
+    }
+
     // ── Needle ────────────────────────────────────────────────────────
-    float arm_rad = (90.0f - angle_deg)
-                  * static_cast<float>(std::numbers::pi_v<double>) / 180.0f;
-    QPointF tip(cx + (radius - 8) * std::cos(arm_rad),
-                py - (radius - 8) * std::sin(arm_rad));
+    float angle_deg = 0.0f;
+    if (running_) {
+        double beat_ms  = 60000.0 / bpm_;
+        double since_ms = static_cast<double>(elapsed_.elapsed() - last_beat_ms_);
+        double phase    = std::min(since_ms / beat_ms, 1.0);
+        double swing    = kMaxSwing * (1.0 - 2.0 * phase);
+        angle_deg       = static_cast<float>(needle_direction_ * swing);
+    }
+
+    float arm_rad = (90.0f - angle_deg) * static_cast<float>(std::numbers::pi_v<double>) / 180.0f;
+    QPointF tip(g.cx + (g.radius - 8) * std::cos(arm_rad),
+                g.py - (g.radius - 8) * std::sin(arm_rad));
 
     p.setPen(QPen(QColor(60, 35, 5, 70), 3, Qt::SolidLine, Qt::RoundCap));
     p.drawLine(pivot + QPointF(1.5, 1.5), tip + QPointF(1.5, 1.5));
@@ -171,47 +248,15 @@ void BeatMeterWidget::paintEvent(QPaintEvent*)
     p.drawLine(pivot, tip);
 
     p.setPen(QPen(QColor(180, 50, 20), 3, Qt::SolidLine, Qt::RoundCap));
-    QPointF tip_base(cx + (radius - 28) * std::cos(arm_rad),
-                     py - (radius - 28) * std::sin(arm_rad));
+    QPointF tip_base(g.cx + (g.radius - 28) * std::cos(arm_rad),
+                     g.py - (g.radius - 28) * std::sin(arm_rad));
     p.drawLine(tip_base, tip);
 
+    // Re-draw pivot cap on top of needle base
     p.setBrush(QColor(55, 32, 5));
     p.setPen(QPen(QColor(30, 15, 0), 1));
     p.drawEllipse(pivot, 6.0, 6.0);
     p.setBrush(QColor(130, 90, 20));
     p.setPen(Qt::NoPen);
     p.drawEllipse(pivot, 3.0, 3.0);
-
-    // ── LED rows ──────────────────────────────────────────────────────
-    const QColor col_on (255, 80, 15);
-    const QColor col_off(110, 38,  8);
-    const float rows_top = static_cast<float>(kNeedleH) + kRowPad;
-
-    for (int row = 0; row < n_rows; ++row) {
-        const MeasureSpec& m = sequence_.measures[row];
-        int n_beats  = m.numerator;
-        float row_cy = rows_top + row * kRowH + kRowH * 0.5f;
-
-        for (int b = 0; b < n_beats; ++b) {
-            float bx = 12.0f + (b + 0.5f) * (kW - 24.0f) / n_beats;
-            bool lit = (row == active_measure_ && b == active_beat_);
-
-            if (lit) {
-                QRadialGradient glow(bx, row_cy, led_r * 3.0f);
-                glow.setColorAt(0, QColor(255, 90, 10, 160));
-                glow.setColorAt(1, Qt::transparent);
-                p.setPen(Qt::NoPen);
-                p.setBrush(glow);
-                p.drawEllipse(QPointF(bx, row_cy), led_r * 3.0f, led_r * 3.0f);
-            }
-
-            QColor col = lit ? col_on : col_off;
-            QRadialGradient grad(bx - led_r * 0.3f, row_cy - led_r * 0.3f, led_r * 1.2f);
-            grad.setColorAt(0, col.lighter(lit ? 160 : 120));
-            grad.setColorAt(1, col);
-            p.setBrush(grad);
-            p.setPen(QPen(QColor(40, 15, 3), 1));
-            p.drawEllipse(QPointF(bx, row_cy), led_r, led_r);
-        }
-    }
 }
