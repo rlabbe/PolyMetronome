@@ -115,7 +115,11 @@ void AudioEngine::start()
         // is fully primed before any click is scheduled. Without this, on
         // first start (after dialog open) WASAPI's startup buffering can
         // produce a duplicate first click.
-        anchor_position_ = sample_rate_ / 20;
+        qint64 initial_offset = sample_rate_ / 20;
+        count_in_sps_ = static_cast<double>(sample_rate_) * 60.0 / (static_cast<double>(bpm_) * subs_per_beat_);
+        count_in_anchor_ = initial_offset;
+        count_in_subtick_ = 0;
+        anchor_position_ = initial_offset + static_cast<qint64>(std::round(count_in_beats_ * subs_per_beat_ * count_in_sps_));
         seq_measure_idx_ = 0;
         subticks_in_measure_ = 0;
         keepalive_phase_ = 0.0;
@@ -189,6 +193,12 @@ void AudioEngine::set_mono_mode(bool on)
     mono_mode_ = on;
 }
 
+void AudioEngine::set_count_in(int beats)
+{
+    QMutexLocker lock(&mutex_);
+    count_in_beats_ = std::max(0, beats);
+}
+
 qint64 AudioEngine::readData(char* data, qint64 max_len)
 {
     int channels = format_.channelCount();
@@ -218,6 +228,19 @@ qint64 AudioEngine::readData(char* data, qint64 max_len)
     };
 
     qint64 buffer_end = position_samples_ + n_frames;
+
+    {
+        int total_ci_subs = count_in_beats_ * subs_per_beat_;
+        while (count_in_subtick_ < total_ci_subs) {
+            qint64 spos = count_in_anchor_ + static_cast<qint64>(std::round(count_in_subtick_ * count_in_sps_));
+            if (spos >= buffer_end)
+                break;
+            if (spos >= position_samples_ && count_in_subtick_ % subs_per_beat_ == 0)
+                schedule(spos, Beat);
+            ++count_in_subtick_;
+        }
+    }
+
     while (true) {
         const MeasureSpec& m = current_measure_locked();
         int curr_numer = m.numerator > 0 ? m.numerator : 4;

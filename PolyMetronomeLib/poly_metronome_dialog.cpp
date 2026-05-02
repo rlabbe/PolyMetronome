@@ -1,5 +1,6 @@
 #include "poly_metronome_dialog.h"
 
+#include "count_in_card.h"
 #include "meter_sequence_widget.h"
 #include "poly_metronome.h"
 
@@ -21,6 +22,9 @@ PolyMetronomeDialog::PolyMetronomeDialog(QWidget* parent)
     auto* main = new QVBoxLayout(this);
 
     meter_widget_ = new MeterSequenceWidget(this);
+
+    count_in_ = new CountInCard(this);
+    meter_widget_->set_prefix_widget(count_in_);
     main->addWidget(meter_widget_);
 
     auto* form = new QFormLayout;
@@ -118,6 +122,7 @@ PolyMetronomeDialog::PolyMetronomeDialog(QWidget* parent)
     connect(accent_volume_, &QSlider::valueChanged, this, &PolyMetronomeDialog::on_accent_volume_changed);
     connect(sound_mode_button_, &QPushButton::toggled, this, &PolyMetronomeDialog::on_sound_mode_toggled);
     connect(start_stop_, &QPushButton::clicked, this, &PolyMetronomeDialog::on_start_stop_clicked);
+    connect(count_in_, &CountInCard::value_changed, this, [this](int) { emit state_changed(); });
 
     on_sequence_changed(meter_widget_->sequence());
     on_bpm_changed(bpm_dial_->value());
@@ -132,7 +137,7 @@ PolyMetronomeDialog::PolyMetronomeDialog(QWidget* parent)
 
     adjustSize();
     setFixedHeight(height());
-    resize(width() * 2, height());
+    resize(width() + 120, height());
 }
 
 PolyMetronomeDialog::~PolyMetronomeDialog()
@@ -153,6 +158,7 @@ PolyMetronomeState PolyMetronomeDialog::state() const
     s.triplet_volume = triplet_volume_->value() / 100.0f;
     s.quintuplet_volume = quintuplet_volume_->value() / 100.0f;
     s.mono_mode = sound_mode_button_->isChecked();
+    s.count_in = count_in_->value();
     s.sequence = meter_widget_->sequence();
     return s;
 }
@@ -170,6 +176,7 @@ void PolyMetronomeDialog::apply_state(const PolyMetronomeState& s)
         QSignalBlocker b8(quintuplet_volume_);
         QSignalBlocker b9(sound_mode_button_);
         QSignalBlocker b10(meter_widget_);
+        QSignalBlocker b11(count_in_);
 
         bpm_dial_->setValue(s.bpm);
         master_volume_->setValue(static_cast<int>(s.master_volume * 100.0f));
@@ -180,6 +187,7 @@ void PolyMetronomeDialog::apply_state(const PolyMetronomeState& s)
         triplet_volume_->setValue(static_cast<int>(s.triplet_volume * 100.0f));
         quintuplet_volume_->setValue(static_cast<int>(s.quintuplet_volume * 100.0f));
         sound_mode_button_->setChecked(s.mono_mode);
+        count_in_->set_value(s.count_in);
         meter_widget_->set_sequence(s.sequence);
     }
 
@@ -223,6 +231,7 @@ void PolyMetronomeDialog::on_start_stop_clicked()
         start_stop_->setText("Start");
     }
     else {
+        metronome_->set_count_in(count_in_->value());
         metronome_->start();
         start_stop_->setText("Stop");
     }

@@ -19,6 +19,7 @@ struct POLYMETRONOME_API PolyMetronomeState
     float triplet_volume = 0.0f;
     float quintuplet_volume = 0.0f;
     bool mono_mode = true;
+    int count_in = 0;
     MeterSequence sequence = MeterSequence::default_4_4();
 
     QJsonObject to_json() const;
@@ -47,6 +48,7 @@ public:
     void set_master_volume(float v);
     void set_sequence(const MeterSequence& seq);
     void set_mono_mode(bool on);
+    void set_count_in(int beats);
 
 private:
     AudioEngine* audio_ = nullptr;

@@ -138,6 +138,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="audio_engine.cpp" />
+    <ClCompile Include="count_in_card.cpp" />
     <ClCompile Include="meter.cpp" />
     <ClCompile Include="meter_card.cpp" />
     <ClCompile Include="meter_edit_dialog.cpp" />
@@ -149,6 +150,7 @@
     <ClInclude Include="meter.h" />
     <ClInclude Include="poly_metronome_export.h" />
     <QtMoc Include="audio_engine.h" />
+    <QtMoc Include="count_in_card.h" />
     <QtMoc Include="meter_card.h" />
     <QtMoc Include="meter_edit_dialog.h" />
     <QtMoc Include="meter_sequence_widget.h" />

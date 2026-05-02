@@ -38,6 +38,7 @@ public:
     void set_volume(ClickType type, float vol);
     void set_sequence(const MeterSequence& seq);
     void set_mono_mode(bool on);
+    void set_count_in(int beats);
 
     bool isSequential() const override { return true; }
     qint64 bytesAvailable() const override;
@@ -82,6 +83,10 @@ private:
     float master_volume_ = 1.0f;
     bool mono_mode_ = true;
     std::array<float, NumTypes> volumes_ = { { 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f } };
+    int count_in_beats_ = 0;
+    int count_in_subtick_ = 0;
+    qint64 count_in_anchor_ = 0;
+    double count_in_sps_ = 0.0;
     uint32_t dither_state_ = 0x12345678u;
     double keepalive_phase_ = 0.0;
 };

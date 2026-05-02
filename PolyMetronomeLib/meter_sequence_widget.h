@@ -25,6 +25,7 @@ public:
 
     void set_sequence(const MeterSequence& seq);
     const MeterSequence& sequence() const { return sequence_; }
+    void set_prefix_widget(QWidget* w);
 
 signals:
     void sequence_changed(const MeterSequence& seq);
@@ -50,6 +51,7 @@ private:
 
     QComboBox* preset_combo_ = nullptr;
     QPushButton* preset_apply_ = nullptr;
+    QHBoxLayout* cards_row_ = nullptr;
     QScrollArea* scroll_ = nullptr;
     QWidget* cards_container_ = nullptr;
     QHBoxLayout* cards_layout_ = nullptr;

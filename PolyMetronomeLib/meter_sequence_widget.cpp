@@ -52,7 +52,11 @@ MeterSequenceWidget::MeterSequenceWidget(QWidget* parent)
     cards_layout_->setContentsMargins(8, 8, 8, 8);
     cards_layout_->addStretch();
     scroll_->setWidget(cards_container_);
-    main->addWidget(scroll_);
+    cards_row_ = new QHBoxLayout;
+    cards_row_->setContentsMargins(0, 0, 0, 0);
+    cards_row_->setSpacing(6);
+    cards_row_->addWidget(scroll_, 1);
+    main->addLayout(cards_row_);
 
     drop_indicator_ = new QFrame(cards_container_);
     drop_indicator_->setFrameShape(QFrame::NoFrame);
@@ -66,6 +70,11 @@ MeterSequenceWidget::MeterSequenceWidget(QWidget* parent)
 
     sequence_ = MeterSequence::default_4_4();
     rebuild_cards();
+}
+
+void MeterSequenceWidget::set_prefix_widget(QWidget* w)
+{
+    cards_row_->insertWidget(0, w);
 }
 
 void MeterSequenceWidget::set_sequence(const MeterSequence& seq)

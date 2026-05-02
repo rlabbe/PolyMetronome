@@ -14,6 +14,7 @@ QJsonObject PolyMetronomeState::to_json() const
     obj["triplet_volume"] = triplet_volume;
     obj["quintuplet_volume"] = quintuplet_volume;
     obj["mono_mode"] = mono_mode;
+    obj["count_in"] = count_in;
     obj["sequence"] = sequence.to_json();
     return obj;
 }
@@ -33,6 +34,7 @@ PolyMetronomeState PolyMetronomeState::from_json(const QJsonObject& obj)
     s.triplet_volume = static_cast<float>(obj.value("triplet_volume").toDouble(0.0));
     s.quintuplet_volume = static_cast<float>(obj.value("quintuplet_volume").toDouble(0.0));
     s.mono_mode = obj.value("mono_mode").toBool(true);
+    s.count_in = obj.value("count_in").toInt(0);
     if (obj.contains("sequence"))
         s.sequence = MeterSequence::from_json(obj.value("sequence").toArray());
     return s;
@@ -109,4 +111,9 @@ void PolyMetronome::set_sequence(const MeterSequence& seq)
 void PolyMetronome::set_mono_mode(bool on)
 {
     audio_->set_mono_mode(on);
+}
+
+void PolyMetronome::set_count_in(int beats)
+{
+    audio_->set_count_in(beats);
 }
