@@ -159,13 +159,12 @@ MeterEditDialog::MeterEditDialog(const MeasureSpec& spec, bool can_delete, QWidg
         b->setCheckable(true);
         b->setFont(big);
         b->setMinimumHeight(field_height);
-        b->setMinimumWidth(48);
+        b->setMinimumWidth(36);
         if (d == spec.denominator)
             b->setChecked(true);
         note_value_group_->addButton(b, d);
         note_value_layout->addWidget(b);
     }
-    note_value_layout->addStretch();
     if (note_value_group_->checkedId() == -1) {
         if (auto* fallback = note_value_group_->button(4))
             fallback->setChecked(true);
@@ -216,6 +215,8 @@ MeterEditDialog::MeterEditDialog(const MeasureSpec& spec, bool can_delete, QWidg
     connect(cancel_btn, &QPushButton::clicked, this, &QDialog::reject);
 
     update_validity();
+    adjustSize();
+    resize(minimumSizeHint());
 }
 
 int MeterEditDialog::current_note_value() const

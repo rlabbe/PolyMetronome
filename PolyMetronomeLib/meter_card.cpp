@@ -15,8 +15,8 @@ MeterCard::MeterCard(QWidget* parent)
 {
     setMouseTracking(true);
     setCursor(Qt::PointingHandCursor);
-    setMinimumSize(70, 100);
-    setMaximumSize(70, 100);
+    setMinimumSize(70, 70);
+    setMaximumSize(70, 70);
 }
 
 void MeterCard::set_measure(const MeasureSpec& m)
@@ -27,7 +27,7 @@ void MeterCard::set_measure(const MeasureSpec& m)
 
 QSize MeterCard::sizeHint() const
 {
-    return QSize(70, 100);
+    return QSize(70, 70);
 }
 
 void MeterCard::paintEvent(QPaintEvent*)

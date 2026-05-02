@@ -95,10 +95,15 @@ PolyMetronomeDialog::PolyMetronomeDialog(QWidget* parent)
     sound_mode_button_ = new QPushButton(this);
     sound_mode_button_->setCheckable(true);
     sound_mode_button_->setChecked(true);
-    form->addRow(sound_mode_button_);
+    sound_mode_button_->hide();
 
     start_stop_ = new QPushButton("Start", this);
-    form->addRow(start_stop_);
+    start_stop_->setFixedSize(64, 64);
+
+    auto* start_row = new QHBoxLayout;
+    start_row->addStretch();
+    start_row->addWidget(start_stop_);
+    form->addRow(start_row);
 
     main->addLayout(form);
 
