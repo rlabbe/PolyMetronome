@@ -55,7 +55,7 @@ private:
 
     struct ActiveClick
     {
-        qint64 start_in_buffer;
+        size_t start_in_buffer;
         size_t pos_in_click;
         float gain;
         int type;
@@ -79,16 +79,16 @@ private:
     int bpm_ = 60;
     MeterSequence sequence_ = MeterSequence::default_4_4();
     int seq_measure_idx_ = 0;
-    qint64 subticks_in_measure_ = 0;
+    size_t subticks_in_measure_ = 0;
     double samples_per_subtick_ = 0.0;
-    qint64 position_samples_ = 0;
-    qint64 anchor_position_ = 0;
+    size_t position_samples_ = 0;
+    size_t anchor_position_ = 0;
     float master_volume_ = 1.0f;
     bool mono_mode_ = true;
     std::array<float, NumTypes> volumes_ = { { 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f } };
     int count_in_beats_ = 0;
     int count_in_subtick_ = 0;
-    qint64 count_in_anchor_ = 0;
+    size_t count_in_anchor_ = 0;
     double count_in_sps_ = 0.0;
     uint32_t dither_state_ = 0x12345678u;
     double keepalive_phase_ = 0.0;

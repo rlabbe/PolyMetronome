@@ -8,6 +8,8 @@
     <ClCompile Include="meter_sequence_widget.cpp" />
     <ClCompile Include="poly_metronome.cpp" />
     <ClCompile Include="poly_metronome_dialog.cpp" />
+    <ClCompile Include="beat_meter_widget.cpp" />
+    <ClCompile Include="count_in_card.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="meter.h" />
@@ -18,5 +20,9 @@
     <QtMoc Include="meter_sequence_widget.h" />
     <QtMoc Include="poly_metronome.h" />
     <QtMoc Include="poly_metronome_dialog.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <QtMoc Include="beat_meter_widget.h" />
+    <QtMoc Include="count_in_card.h" />
   </ItemGroup>
 </Project>

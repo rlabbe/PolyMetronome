@@ -14,6 +14,8 @@
 AudioEngine::AudioEngine(QObject* parent)
     : QIODevice(parent)
 {
+    active_clicks_.reserve(64);
+
     QAudioFormat desired;
     desired.setSampleRate(sample_rate_);
     desired.setChannelCount(1);
@@ -31,8 +33,8 @@ AudioEngine::AudioEngine(QObject* parent)
     }
     sample_rate_ = format_.sampleRate();
     qInfo() << "AudioEngine: format rate=" << format_.sampleRate()
-            << "channels=" << format_.channelCount()
-            << "fmt=" << format_.sampleFormat();
+        << "channels=" << format_.channelCount()
+        << "fmt=" << format_.sampleFormat();
 
     rebuild_click_samples();
     recompute_sps_locked();
@@ -57,14 +59,14 @@ void AudioEngine::rebuild_click_samples()
         for (int i = 0; i < n; ++i) {
             float ts = static_cast<float>(i) / sample_rate_;
             float env = std::exp(-ts * decay);
-            click_samples_[t][i] = std::sin(2.0f * std::numbers::pi_v<float> * freqs[t] * ts) * env;
+            click_samples_[t][i] = std::sin(2.0f * std::numbers::pi_v<float> *freqs[t] * ts) * env;
         }
     }
     mono_sample_.resize(n);
     for (int i = 0; i < n; ++i) {
         float ts = static_cast<float>(i) / sample_rate_;
         float env = std::exp(-ts * decay);
-        mono_sample_[i] = std::sin(2.0f * std::numbers::pi_v<float> * mono_freq * ts) * env;
+        mono_sample_[i] = std::sin(2.0f * std::numbers::pi_v<float> *mono_freq * ts) * env;
     }
 }
 
@@ -86,7 +88,7 @@ void AudioEngine::recompute_sps_locked()
         denom = 4;
     // Sub-tick is 1/60 of a beat. A beat is 1/denominator of a whole note.
     // BPM = quarter notes per minute (always). So time per beat = (60/bpm)*(4/denom) sec.
-    samples_per_subtick_ = static_cast<double>(sample_rate_) * 4.0 / (static_cast<double>(bpm_) * static_cast<double>(denom));
+    samples_per_subtick_ = sample_rate_ * 4.0 / static_cast<double>(bpm_ * denom);
 }
 
 bool AudioEngine::is_group_boundary_locked(int beat_in_measure) const
@@ -116,11 +118,11 @@ void AudioEngine::start()
         // enough on WASAPI — startup re-pulls produced duplicate clicks and
         // split accent/beat across buffers. 250 ms is comfortably past any
         // typical sink buffer and double-pull window.
-        qint64 initial_offset = sample_rate_ / 4;
-        count_in_sps_ = static_cast<double>(sample_rate_) * 60.0 / (static_cast<double>(bpm_) * subs_per_beat_);
+        int initial_offset = sample_rate_ / 4;
+        count_in_sps_ = sample_rate_ * 60.0 / static_cast<double>(bpm_ * subs_per_beat_);
         count_in_anchor_ = initial_offset;
         count_in_subtick_ = 0;
-        anchor_position_ = initial_offset + static_cast<qint64>(std::round(count_in_beats_ * subs_per_beat_ * count_in_sps_));
+        anchor_position_ = static_cast<size_t>(initial_offset + std::round(count_in_beats_ * subs_per_beat_ * count_in_sps_));
         seq_measure_idx_ = 0;
         subticks_in_measure_ = 0;
         keepalive_phase_ = 0.0;
@@ -131,8 +133,8 @@ void AudioEngine::start()
     open(QIODevice::ReadOnly);
     sink_->start(this);
     qInfo() << "AudioEngine::start: sink state=" << sink_->state()
-            << "error=" << sink_->error()
-            << "bufferSize=" << sink_->bufferSize();
+        << "error=" << sink_->error()
+        << "bufferSize=" << sink_->bufferSize();
 }
 
 void AudioEngine::stop()
@@ -208,11 +210,11 @@ qint64 AudioEngine::readData(char* data, qint64 max_len)
         return 0;
 
     int bytes_per_frame = channels * bytes_per_sample;
-    qint64 n_frames = max_len / bytes_per_frame;
+    size_t n_frames = max_len / bytes_per_frame;
     if (n_frames <= 0)
         return 0;
 
-    scratch_.assign(static_cast<size_t>(n_frames), 0.0f);
+    scratch_.assign(n_frames, 0.0f);
 
     QMutexLocker lock(&mutex_);
 
@@ -228,12 +230,12 @@ qint64 AudioEngine::readData(char* data, qint64 max_len)
         active_clicks_.push_back(c);
     };
 
-    qint64 buffer_end = position_samples_ + n_frames;
+    size_t buffer_end = position_samples_ + n_frames;
 
     {
         int total_ci_subs = count_in_beats_ * subs_per_beat_;
         while (count_in_subtick_ < total_ci_subs) {
-            qint64 spos = count_in_anchor_ + static_cast<qint64>(std::round(count_in_subtick_ * count_in_sps_));
+            size_t spos = count_in_anchor_ + static_cast<size_t>(std::round(count_in_subtick_ * count_in_sps_));
             if (spos >= buffer_end)
                 break;
             if (spos >= position_samples_ && count_in_subtick_ % subs_per_beat_ == 0)
@@ -245,9 +247,9 @@ qint64 AudioEngine::readData(char* data, qint64 max_len)
     while (true) {
         const MeasureSpec& m = current_measure_locked();
         int curr_numer = m.numerator > 0 ? m.numerator : 4;
-        qint64 subs_in_curr_measure = static_cast<qint64>(curr_numer) * subs_per_beat_;
+        size_t subs_in_curr_measure = curr_numer * subs_per_beat_;
 
-        qint64 spos = anchor_position_ + static_cast<qint64>(std::round(static_cast<double>(subticks_in_measure_) * samples_per_subtick_));
+        size_t spos = anchor_position_ + static_cast<size_t>(std::round(subticks_in_measure_ * samples_per_subtick_));
         if (spos >= buffer_end)
             break;
 
@@ -281,7 +283,7 @@ qint64 AudioEngine::readData(char* data, qint64 max_len)
         ++subticks_in_measure_;
 
         if (subticks_in_measure_ >= subs_in_curr_measure) {
-            anchor_position_ = anchor_position_ + static_cast<qint64>(std::round(static_cast<double>(subs_in_curr_measure) * samples_per_subtick_));
+            anchor_position_ = anchor_position_ + static_cast<size_t>(std::round(subs_in_curr_measure * samples_per_subtick_));
             subticks_in_measure_ = 0;
             int total = sequence_.total_measures();
             if (total <= 0)
@@ -293,13 +295,13 @@ qint64 AudioEngine::readData(char* data, qint64 max_len)
 
     for (auto& click : active_clicks_) {
         const std::vector<float>& sample_buf = (mono_mode_ && click.type != Accent) ? mono_sample_ : click_samples_[click.type];
-        qint64 click_remaining = static_cast<qint64>(sample_buf.size()) - static_cast<qint64>(click.pos_in_click);
-        qint64 buffer_remaining = n_frames - click.start_in_buffer;
-        qint64 to_mix = std::min(click_remaining, buffer_remaining);
+        size_t click_remaining = sample_buf.size() - click.pos_in_click;
+        size_t buffer_remaining = n_frames - click.start_in_buffer;
+        size_t to_mix = std::min(click_remaining, buffer_remaining);
         if (to_mix > 0) {
-            for (qint64 i = 0; i < to_mix; ++i)
-                scratch_[static_cast<size_t>(click.start_in_buffer + i)] += sample_buf[click.pos_in_click + static_cast<size_t>(i)] * click.gain;
-            click.pos_in_click += static_cast<size_t>(to_mix);
+            for (size_t i = 0; i < to_mix; ++i)
+                scratch_[click.start_in_buffer + i] += sample_buf[click.pos_in_click + i] * click.gain;
+            click.pos_in_click += to_mix;
         }
         click.start_in_buffer = 0;
     }
@@ -325,10 +327,10 @@ qint64 AudioEngine::readData(char* data, qint64 max_len)
     constexpr double keepalive_freq = 20.0;
     constexpr float keepalive_amp = 0.00316f;
     constexpr float keepalive_noise_amp = 0.0005f;
-    const double phase_step = 2.0 * std::numbers::pi_v<double> * keepalive_freq / static_cast<double>(sample_rate_);
-    const double two_pi = 2.0 * std::numbers::pi_v<double>;
+    const double phase_step = 2.0 * std::numbers::pi * keepalive_freq / static_cast<double>(sample_rate_);
+    constexpr double two_pi = 2.0 * std::numbers::pi;
 
-    for (qint64 i = 0; i < n_frames; ++i) {
+    for (size_t i = 0; i < n_frames; ++i) {
         float carrier = static_cast<float>(std::sin(keepalive_phase_)) * keepalive_amp;
         keepalive_phase_ += phase_step;
         if (keepalive_phase_ >= two_pi)
@@ -337,12 +339,12 @@ qint64 AudioEngine::readData(char* data, qint64 max_len)
         dither_state_ = dither_state_ * 1664525u + 1013904223u;
         float n = (static_cast<float>(static_cast<int32_t>(dither_state_)) / 2147483648.0f) * keepalive_noise_amp;
 
-        float v = scratch_[static_cast<size_t>(i)] * master + carrier + n;
+        float v = scratch_[i] * master + carrier + n;
         if (v > 1.0f)
             v = 1.0f;
         else if (v < -1.0f)
             v = -1.0f;
-        scratch_[static_cast<size_t>(i)] = v;
+        scratch_[i] = v;
     }
 
     position_samples_ += n_frames;
@@ -350,32 +352,32 @@ qint64 AudioEngine::readData(char* data, qint64 max_len)
     auto fmt = format_.sampleFormat();
     if (fmt == QAudioFormat::Int16) {
         int16_t* out = reinterpret_cast<int16_t*>(data);
-        for (qint64 i = 0; i < n_frames; ++i) {
-            int16_t s = static_cast<int16_t>(scratch_[static_cast<size_t>(i)] * 32767.0f);
+        for (size_t i = 0; i < n_frames; ++i) {
+            int16_t s = static_cast<int16_t>(scratch_[i] * 32767.0f);
             for (int c = 0; c < channels; ++c)
                 *out++ = s;
         }
     }
     else if (fmt == QAudioFormat::Float) {
         float* out = reinterpret_cast<float*>(data);
-        for (qint64 i = 0; i < n_frames; ++i) {
-            float s = scratch_[static_cast<size_t>(i)];
+        for (size_t i = 0; i < n_frames; ++i) {
+            float s = scratch_[i];
             for (int c = 0; c < channels; ++c)
                 *out++ = s;
         }
     }
     else if (fmt == QAudioFormat::Int32) {
         int32_t* out = reinterpret_cast<int32_t*>(data);
-        for (qint64 i = 0; i < n_frames; ++i) {
-            int32_t s = static_cast<int32_t>(scratch_[static_cast<size_t>(i)] * 2147483647.0f);
+        for (size_t i = 0; i < n_frames; ++i) {
+            int32_t s = static_cast<int32_t>(scratch_[i] * 2147483647.0f);
             for (int c = 0; c < channels; ++c)
                 *out++ = s;
         }
     }
     else if (fmt == QAudioFormat::UInt8) {
         uint8_t* out = reinterpret_cast<uint8_t*>(data);
-        for (qint64 i = 0; i < n_frames; ++i) {
-            uint8_t s = static_cast<uint8_t>(scratch_[static_cast<size_t>(i)] * 127.0f + 128.0f);
+        for (size_t i = 0; i < n_frames; ++i) {
+            uint8_t s = static_cast<uint8_t>(scratch_[i] * 127.0f + 128.0f);
             for (int c = 0; c < channels; ++c)
                 *out++ = s;
         }

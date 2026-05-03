@@ -69,9 +69,9 @@ void CountInCard::paintEvent(QPaintEvent*)
 
     // Number centered in the full card
     QFontMetrics fm(big);
-    int big_h  = fm.height();
+    int big_h = fm.height();
     int num_cy = static_cast<int>(r.center().y());
-    int num_y  = num_cy - big_h / 2;
+    int num_y = num_cy - big_h / 2;
     p.setFont(big);
     p.setPen(QColor(230, 230, 235));
     p.drawText(QRect(static_cast<int>(r.left()), num_y, static_cast<int>(r.width()), big_h),
@@ -80,21 +80,21 @@ void CountInCard::paintEvent(QPaintEvent*)
     auto arrow_color = [&](Zone z) {
         return hover_zone_ == z ? QColor(200, 220, 255) : QColor(110, 115, 130);
     };
-    float ax      = static_cast<float>(r.right()) - kArrowW / 2.0f;
+    float ax = static_cast<float>(r.right()) - kArrowW / 2.0f;
     float num_cyf = static_cast<float>(num_cy);
 
     auto draw = [&](QPointF tip, bool up, QColor color) {
         QPolygonF tri;
         if (up)
-            tri << tip << QPointF(tip.x() - kAW/2, tip.y() + kAH) << QPointF(tip.x() + kAW/2, tip.y() + kAH);
+            tri << tip << QPointF(tip.x() - kAW / 2, tip.y() + kAH) << QPointF(tip.x() + kAW / 2, tip.y() + kAH);
         else
-            tri << tip << QPointF(tip.x() - kAW/2, tip.y() - kAH) << QPointF(tip.x() + kAW/2, tip.y() - kAH);
+            tri << tip << QPointF(tip.x() - kAW / 2, tip.y() - kAH) << QPointF(tip.x() + kAW / 2, tip.y() - kAH);
         p.setPen(Qt::NoPen);
         p.setBrush(color);
         p.drawPolygon(tri);
     };
 
-    draw(QPointF(ax, num_cyf - 10), true,  arrow_color(Zone::Up));
+    draw(QPointF(ax, num_cyf - 10), true, arrow_color(Zone::Up));
     draw(QPointF(ax, num_cyf + 10), false, arrow_color(Zone::Down));
 }
 

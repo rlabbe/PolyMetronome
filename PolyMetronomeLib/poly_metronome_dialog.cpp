@@ -32,7 +32,7 @@ PolyMetronomeDialog::PolyMetronomeDialog(QWidget* parent)
     form->setContentsMargins(0, 8, 0, 0);
 
     bpm_dial_ = new QDial(this);
-    bpm_dial_->setRange(30, 240);
+    bpm_dial_->setRange(10, 240);
     bpm_dial_->setValue(60);
     bpm_dial_->setNotchesVisible(true);
     bpm_dial_->setFixedSize(160, 160);
