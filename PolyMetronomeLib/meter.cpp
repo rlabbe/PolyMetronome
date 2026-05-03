@@ -9,11 +9,11 @@ int Grouping::sum() const
     return std::accumulate(sizes.begin(), sizes.end(), 0);
 }
 
-bool Grouping::is_valid_for(int numerator) const
+bool Grouping::is_valid_for(int beats) const
 {
     if (sizes.empty())
         return true;
-    return sum() == numerator;
+    return sum() == beats;
 }
 
 QString Grouping::to_string() const
@@ -24,7 +24,7 @@ QString Grouping::to_string() const
     return parts.join("+");
 }
 
-Grouping Grouping::parse(const QString& s, int numerator, bool* ok)
+Grouping Grouping::parse(const QString& s, int beats, bool* ok)
 {
     Grouping g;
     QString trimmed = s.trimmed();
@@ -47,7 +47,7 @@ Grouping Grouping::parse(const QString& s, int numerator, bool* ok)
         }
         g.sizes.push_back(v);
     }
-    if (g.sum() != numerator) {
+    if (g.sum() != beats) {
         if (ok)
             *ok = false;
         return Grouping{};
@@ -59,12 +59,12 @@ Grouping Grouping::parse(const QString& s, int numerator, bool* ok)
 
 QString MeasureSpec::time_signature_string() const
 {
-    return QString("%1/%2").arg(numerator).arg(denominator);
+    return QString("%1/%2").arg(beats).arg(note_value);
 }
 
 bool MeasureSpec::operator==(const MeasureSpec& other) const
 {
-    return numerator == other.numerator && denominator == other.denominator && repeat == other.repeat && grouping.sizes == other.grouping.sizes;
+    return beats == other.beats && note_value == other.note_value && repeat == other.repeat && grouping.sizes == other.grouping.sizes;
 }
 
 int MeterSequence::total_measures() const
@@ -99,8 +99,8 @@ MeterSequence MeterSequence::default_4_4()
 QJsonObject MeasureSpec::to_json() const
 {
     QJsonObject obj;
-    obj["numerator"] = numerator;
-    obj["denominator"] = denominator;
+    obj["beats"] = beats;
+    obj["note_value"] = note_value;
     obj["repeat"] = repeat;
     QJsonArray g;
     for (int s : grouping.sizes)
@@ -112,8 +112,11 @@ QJsonObject MeasureSpec::to_json() const
 MeasureSpec MeasureSpec::from_json(const QJsonObject& obj)
 {
     MeasureSpec m;
-    m.numerator = obj.value("numerator").toInt(4);
-    m.denominator = obj.value("denominator").toInt(4);
+    // Accept legacy "numerator"/"denominator" keys for older saved state.
+    m.beats      = obj.contains("beats")      ? obj.value("beats").toInt(4)
+                                              : obj.value("numerator").toInt(4);
+    m.note_value = obj.contains("note_value") ? obj.value("note_value").toInt(4)
+                                              : obj.value("denominator").toInt(4);
     m.repeat = obj.value("repeat").toInt(1);
     QJsonArray g = obj.value("grouping").toArray();
     for (const auto& v : g)
@@ -143,8 +146,8 @@ const std::vector<Preset>& PresetLibrary::all()
         std::vector<Preset> v;
         auto make = [](int n, int d, std::vector<int> g = {}, int rep = 1) {
             MeasureSpec m;
-            m.numerator = n;
-            m.denominator = d;
+            m.beats = n;
+            m.note_value = d;
             m.repeat = rep;
             m.grouping.sizes = std::move(g);
             return m;

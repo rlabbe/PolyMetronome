@@ -33,10 +33,25 @@ protected:
     void leaveEvent(QEvent* e) override;
 
 private:
-    enum class Zone { None, NumUp, NumDown, DenUp, DenDown };
+    enum class Zone { None, BeatsUp, BeatsDown, NoteUp, NoteDown };
+
+    struct Layout {
+        QRectF card_rect;            // padded outer rect
+        QRectF numbers_rect;         // text area, excludes arrow strip
+        int divider_y;
+        int number_text_height;
+        int beats_center_y;
+        int note_center_y;
+        QPointF beats_up_tip;
+        QPointF beats_down_tip;
+        QPointF note_up_tip;
+        QPointF note_down_tip;
+    };
+    void compute_layout();
     Zone zone_at(QPoint p) const;
     void draw_arrow(QPainter& p, QPointF tip, bool up, QColor color);
 
+    Layout layout_;
     MeasureSpec measure_;
     bool hovered_ = false;
     Zone hover_zone_ = Zone::None;

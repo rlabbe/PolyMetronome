@@ -27,8 +27,17 @@ protected:
 
 private:
     enum class Zone { None, Up, Down };
+
+    struct Layout {
+        QRectF card_rect;
+        int number_center_y;
+        QPointF up_arrow_tip;
+        QPointF down_arrow_tip;
+    };
+    void compute_layout();
     Zone zone_at(QPoint p) const;
 
+    Layout layout_;
     int value_ = 0;
     Zone hover_zone_ = Zone::None;
 };

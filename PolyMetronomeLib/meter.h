@@ -13,15 +13,15 @@ struct POLYMETRONOME_API Grouping
 
     bool is_empty() const { return sizes.empty(); }
     int sum() const;
-    bool is_valid_for(int numerator) const;
+    bool is_valid_for(int beats) const;
     QString to_string() const;
-    static Grouping parse(const QString& s, int numerator, bool* ok = nullptr);
+    static Grouping parse(const QString& s, int beats, bool* ok = nullptr);
 };
 
 struct POLYMETRONOME_API MeasureSpec
 {
-    int numerator = 4;
-    int denominator = 4;
+    int beats = 4;
+    int note_value = 4;
     int repeat = 1;
     Grouping grouping;
 

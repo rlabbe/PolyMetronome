@@ -1,3 +1,30 @@
+// Tick scheduling design
+// ──────────────────────
+// Audio mixing happens in readData(): each pull from QAudioSink walks the
+// sequence in 1/60-of-a-beat sub-ticks and mixes click samples into the
+// scratch buffer about to be returned. The audio scheduling cursor
+// (anchor_position_, subticks_in_measure_, seq_measure_idx_) advances only
+// up to the buffer end (n_frames).
+//
+// The widget needs sample-accurate beat onsets for LEDs and the needle.
+// Driving them off the same audio loop fails: readData runs in chunks (one
+// device buffer at a time, ~250 ms on WASAPI), and processedUSecs() only
+// updates per chunk — multiple beats become "available" at the same instant
+// and the visual updates clump.
+//
+// Solution: a separate tick-only scheduler (schedule_ticks_to_locked) with
+// its own cursor (tick_anchor_position_, tick_subticks_in_measure_,
+// tick_seq_measure_idx_). It pushes {play_sample, measure, beat} entries
+// into pending_ticks_ for ~2 s past the current buffer-fill position on
+// every readData call, and the queue is pre-filled with 2 s at start().
+//
+// processed_samples() is wall-clock-derived (QElapsedTimer started at
+// sink_->start()), so it advances continuously at real time. The widget
+// polls it and pop_ticks_through() returns the oldest queued tick whose
+// play_sample <= played. Because the queue is always populated 2 s ahead
+// of audio, each tick crosses the threshold at its true wall-clock instant
+// rather than at a buffer-pull boundary.
+
 #include "audio_engine.h"
 
 #include <QAudioDevice>
@@ -83,12 +110,60 @@ void AudioEngine::recompute_sps_locked()
 {
     if (bpm_ <= 0)
         return;
-    int denom = current_measure_locked().denominator;
-    if (denom <= 0)
-        denom = 4;
-    // Sub-tick is 1/60 of a beat. A beat is 1/denominator of a whole note.
-    // BPM = quarter notes per minute (always). So time per beat = (60/bpm)*(4/denom) sec.
-    samples_per_subtick_ = sample_rate_ * 4.0 / static_cast<double>(bpm_ * denom);
+    int note_value = current_measure_locked().note_value;
+    if (note_value <= 0)
+        note_value = 4;
+    // Sub-tick is 1/60 of a beat. A beat is 1/note_value of a whole note.
+    // BPM = quarter notes per minute (always). So time per beat = (60/bpm)*(4/note_value) sec.
+    samples_per_subtick_ = sample_rate_ * 4.0 / static_cast<double>(bpm_ * note_value);
+}
+
+void AudioEngine::recompute_tick_sps_locked()
+{
+    if (bpm_ <= 0)
+        return;
+    int note_value = 4;
+    if (auto* m = sequence_.at_absolute(tick_seq_measure_idx_))
+        note_value = m->note_value > 0 ? m->note_value : 4;
+    tick_samples_per_subtick_ = sample_rate_ * 4.0 / static_cast<double>(bpm_ * note_value);
+}
+
+void AudioEngine::schedule_ticks_to_locked(qint64 target_sample)
+{
+    int total_ci_subs = count_in_beats_ * subs_per_beat_;
+    while (tick_count_in_subtick_ < total_ci_subs) {
+        size_t spos = tick_count_in_anchor_ + static_cast<size_t>(std::round(tick_count_in_subtick_ * tick_count_in_sps_));
+        if (static_cast<qint64>(spos) > target_sample)
+            return;
+        ++tick_count_in_subtick_;
+    }
+
+    while (true) {
+        const MeasureSpec* mp = sequence_.at_absolute(tick_seq_measure_idx_);
+        int curr_beats = (mp && mp->beats > 0) ? mp->beats : 4;
+        size_t subs_in_curr_measure = curr_beats * subs_per_beat_;
+
+        size_t spos = tick_anchor_position_ + static_cast<size_t>(std::round(tick_subticks_in_measure_ * tick_samples_per_subtick_));
+        if (static_cast<qint64>(spos) > target_sample)
+            return;
+
+        int sub_in_beat = static_cast<int>(tick_subticks_in_measure_ % subs_per_beat_);
+        int beat_in_measure = static_cast<int>(tick_subticks_in_measure_ / subs_per_beat_);
+        if (sub_in_beat == 0)
+            pending_ticks_.push_back({ static_cast<qint64>(spos), tick_seq_measure_idx_, beat_in_measure });
+
+        ++tick_subticks_in_measure_;
+
+        if (tick_subticks_in_measure_ >= subs_in_curr_measure) {
+            tick_anchor_position_ = tick_anchor_position_ + static_cast<size_t>(std::round(subs_in_curr_measure * tick_samples_per_subtick_));
+            tick_subticks_in_measure_ = 0;
+            int total = sequence_.total_measures();
+            if (total <= 0)
+                total = 1;
+            tick_seq_measure_idx_ = (tick_seq_measure_idx_ + 1) % total;
+            recompute_tick_sps_locked();
+        }
+    }
 }
 
 bool AudioEngine::is_group_boundary_locked(int beat_in_measure) const
@@ -112,6 +187,7 @@ void AudioEngine::start()
     {
         QMutexLocker lock(&mutex_);
         active_clicks_.clear();
+        pending_ticks_.clear();
         position_samples_ = 0;
         // Delay the first beat enough that the audio backend's pull pipeline
         // is fully primed before any click is scheduled. 50 ms wasn't always
@@ -129,9 +205,19 @@ void AudioEngine::start()
         if (sequence_.empty())
             sequence_ = MeterSequence::default_4_4();
         recompute_sps_locked();
+
+        tick_seq_measure_idx_ = 0;
+        tick_subticks_in_measure_ = 0;
+        tick_anchor_position_ = anchor_position_;
+        tick_count_in_subtick_ = 0;
+        tick_count_in_sps_ = count_in_sps_;
+        tick_count_in_anchor_ = count_in_anchor_;
+        recompute_tick_sps_locked();
+        schedule_ticks_to_locked(static_cast<qint64>(initial_offset) + 2 * sample_rate_);
     }
     open(QIODevice::ReadOnly);
     sink_->start(this);
+    wall_clock_.start();
     qInfo() << "AudioEngine::start: sink state=" << sink_->state()
         << "error=" << sink_->error()
         << "bufferSize=" << sink_->bufferSize();
@@ -143,6 +229,24 @@ void AudioEngine::stop()
     close();
     QMutexLocker lock(&mutex_);
     active_clicks_.clear();
+    pending_ticks_.clear();
+}
+
+qint64 AudioEngine::processed_samples() const
+{
+    if (!wall_clock_.isValid())
+        return 0;
+    return wall_clock_.nsecsElapsed() * static_cast<qint64>(sample_rate_) / 1'000'000'000;
+}
+
+std::optional<AudioEngine::TickInfo> AudioEngine::pop_ticks_through(qint64 sample_index)
+{
+    QMutexLocker lock(&mutex_);
+    if (pending_ticks_.empty() || pending_ticks_.front().play_sample > sample_index)
+        return std::nullopt;
+    TickInfo t{ pending_ticks_.front().measure, pending_ticks_.front().beat };
+    pending_ticks_.erase(pending_ticks_.begin());
+    return t;
 }
 
 bool AudioEngine::is_running() const
@@ -162,6 +266,11 @@ void AudioEngine::set_bpm(int bpm)
     recompute_sps_locked();
     anchor_position_ = position_samples_;
     subticks_in_measure_ = 0;
+    tick_anchor_position_ = anchor_position_;
+    tick_subticks_in_measure_ = 0;
+    tick_seq_measure_idx_ = seq_measure_idx_;
+    pending_ticks_.clear();
+    recompute_tick_sps_locked();
 }
 
 void AudioEngine::set_master_volume(float vol)
@@ -188,6 +297,11 @@ void AudioEngine::set_sequence(const MeterSequence& seq)
     subticks_in_measure_ = 0;
     anchor_position_ = position_samples_;
     recompute_sps_locked();
+    tick_seq_measure_idx_ = 0;
+    tick_subticks_in_measure_ = 0;
+    tick_anchor_position_ = anchor_position_;
+    pending_ticks_.clear();
+    recompute_tick_sps_locked();
 }
 
 void AudioEngine::set_mono_mode(bool on)
@@ -218,6 +332,8 @@ qint64 AudioEngine::readData(char* data, qint64 max_len)
 
     QMutexLocker lock(&mutex_);
 
+    schedule_ticks_to_locked(static_cast<qint64>(position_samples_ + n_frames + 2 * sample_rate_));
+
     auto schedule = [&](qint64 spos, ClickType t, float gain_mult = 1.0f) {
         float v = volumes_[t] * gain_mult;
         if (v <= 0.0f)
@@ -246,8 +362,8 @@ qint64 AudioEngine::readData(char* data, qint64 max_len)
 
     while (true) {
         const MeasureSpec& m = current_measure_locked();
-        int curr_numer = m.numerator > 0 ? m.numerator : 4;
-        size_t subs_in_curr_measure = curr_numer * subs_per_beat_;
+        int curr_beats = m.beats > 0 ? m.beats : 4;
+        size_t subs_in_curr_measure = curr_beats * subs_per_beat_;
 
         size_t spos = anchor_position_ + static_cast<size_t>(std::round(subticks_in_measure_ * samples_per_subtick_));
         if (spos >= buffer_end)
@@ -263,7 +379,6 @@ qint64 AudioEngine::readData(char* data, qint64 max_len)
             //   20, 40      : triplet offbeats (3 per beat)
             //   12,24,36,48 : quintuplet offbeats (5 per beat)
             if (sub_in_beat == 0) {
-                emit beat_tick(seq_measure_idx_, beat_in_measure);
                 schedule(spos, Beat);
                 if (beat_in_measure == 0)
                     schedule(spos, Accent);

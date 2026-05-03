@@ -7,6 +7,7 @@
 #include <QWidget>
 
 class QTimer;
+class PolyMetronome;
 
 class BeatMeterWidget : public QWidget
 {
@@ -18,11 +19,9 @@ public:
     void set_bpm(int bpm);
     void set_running(bool running);
     void set_sequence(const MeterSequence& seq);
+    void set_metronome(PolyMetronome* m) { metronome_ = m; }
 
     QSize sizeHint() const override;
-
-public slots:
-    void on_beat_tick(int measure_index, int beat_within_measure);
 
 protected:
     void paintEvent(QPaintEvent*) override;
@@ -44,6 +43,7 @@ private:
     QPixmap lit_led_;
     QPointF lit_led_origin_;
     QTimer* frame_timer_;
+    PolyMetronome* metronome_ = nullptr;
     int bpm_ = 60;
     bool running_ = false;
     QElapsedTimer elapsed_;

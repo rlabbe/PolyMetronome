@@ -1,4 +1,27 @@
+// Animation / sync design
+// ───────────────────────
+// frame_timer_ ticks every kFrameIntervalMs. On each tick the lambda:
+//   1. Reads metronome_->processed_samples() — wall-clock-derived sample
+//      index since playback start (advances continuously, not in buffer
+//      chunks like processedUSecs()).
+//   2. Calls metronome_->pop_ticks_through(played), which returns the
+//      oldest queued beat whose play_sample has been crossed. AudioEngine
+//      pre-schedules ticks ~2 s ahead of audio mixing into pending_ticks_,
+//      so each tick crosses its wall-clock instant on time rather than
+//      arriving in a clump at the next buffer pull.
+//   3. On a popped tick: updates active_measure_ / active_beat_, anchors
+//      last_beat_ms_ one frame in the past so the needle is already a step
+//      into its swing on the very next paint, and flips needle_direction_.
+//   4. Calls update().
+//
+// paintEvent blits the cached background pixmap (background, arc, ticks,
+// pivot cap, dark LEDs), blits the pre-rendered lit-LED pixmap at the
+// active beat's position, then draws three line segments for the needle.
+// The needle base is offset outward from the pivot so the cached pivot cap
+// is never overdrawn — no per-frame ellipse calls.
+
 #include "beat_meter_widget.h"
+#include "poly_metronome.h"
 
 #include <QTimer>
 #include <QPainter>
@@ -6,6 +29,7 @@
 #include <cmath>
 #include <numbers>
 
+static constexpr int   kFrameIntervalMs = 16;
 static constexpr float kMaxSwing = 38.0f;   // degrees either side of vertical
 static constexpr int   kW = 210;
 static constexpr int   kNeedleH = 160;     // fixed height of needle/arc region
@@ -19,9 +43,20 @@ BeatMeterWidget::BeatMeterWidget(QWidget* parent)
     setFixedSize(sizeHint());
     frame_timer_ = new QTimer(this);
     frame_timer_->setTimerType(Qt::PreciseTimer);
-    frame_timer_->setInterval(16);
+    frame_timer_->setInterval(kFrameIntervalMs);
 
-    connect(frame_timer_, &QTimer::timeout, this, [this]() { update(); });
+    connect(frame_timer_, &QTimer::timeout, this, [this]() {
+        if (metronome_) {
+            qint64 played = metronome_->processed_samples();
+            if (auto t = metronome_->pop_ticks_through(played)) {
+                active_measure_ = t->measure;
+                active_beat_ = t->beat;
+                last_beat_ms_ = elapsed_.elapsed() - kFrameIntervalMs;
+                needle_direction_ = -needle_direction_;
+            }
+        }
+        update();
+    });
 }
 
 void BeatMeterWidget::set_bpm(int bpm)
@@ -62,17 +97,6 @@ void BeatMeterWidget::set_sequence(const MeterSequence& seq)
     active_beat_ = -1;
     static_cache_ = QPixmap();   // invalidate
     setFixedSize(sizeHint());
-    update();
-}
-
-void BeatMeterWidget::on_beat_tick(int measure_index, int beat_within_measure)
-{
-    active_measure_ = measure_index;
-    active_beat_ = beat_within_measure;
-    // Anchor one frame in the past so the needle is already one step into
-    // its swing on the very next paint, instead of sitting at the extreme.
-    last_beat_ms_ = elapsed_.elapsed() - 16;
-    needle_direction_ = -needle_direction_;
     update();
 }
 
@@ -195,7 +219,7 @@ void BeatMeterWidget::build_static_cache()
     const QColor col_off(110, 38, 8);
     int n_rows = sequence_.measures.empty() ? 0 : static_cast<int>(sequence_.measures.size());
     for (int row = 0; row < n_rows; ++row) {
-        int n_beats = sequence_.measures[row].numerator;
+        int n_beats = sequence_.measures[row].beats;
         float row_cy = geometry_.rows_top + row * kRowH + kRowH * 0.5f;
         for (int b = 0; b < n_beats; ++b) {
             float bx = 12.0f + (b + 0.5f) * (kW - 24.0f) / n_beats;
@@ -223,7 +247,7 @@ void BeatMeterWidget::paintEvent(QPaintEvent*)
     if (active_measure_ >= 0 && active_measure_ < static_cast<int>(sequence_.measures.size())
         && active_beat_ >= 0)
     {
-        int n_beats = sequence_.measures[active_measure_].numerator;
+        int n_beats = sequence_.measures[active_measure_].beats;
         if (active_beat_ < n_beats) {
             float row_cy = geometry_.rows_top + active_measure_ * kRowH + kRowH * 0.5f;
             float bx = 12.0f + (active_beat_ + 0.5f) * (kW - 24.0f) / n_beats;
@@ -234,10 +258,10 @@ void BeatMeterWidget::paintEvent(QPaintEvent*)
     // ── Needle ────────────────────────────────────────────────────────
     float angle_deg = 0.0f;
     if (running_) {
-        int denom = 4;
+        int note_value = 4;
         if (active_measure_ >= 0 && active_measure_ < static_cast<int>(sequence_.measures.size()))
-            denom = sequence_.measures[active_measure_].denominator;
-        float beat_ms = 60000.0f / bpm_ * 4.0f / denom;
+            note_value = sequence_.measures[active_measure_].note_value;
+        float beat_ms = 60000.0f / bpm_ * 4.0f / note_value;
         float since_ms = static_cast<float>(elapsed_.elapsed() - last_beat_ms_);
         float phase = std::min(since_ms / beat_ms, 1.0f);
         float swing = kMaxSwing * (1.0f - 2.0f * phase);
@@ -246,10 +270,13 @@ void BeatMeterWidget::paintEvent(QPaintEvent*)
 
     float arm_rad = (90.0f - angle_deg) * std::numbers::pi_v<float> / 180.0f;
     const float r_inner = 7.0f;
-    QPointF base(pivot_.x() + r_inner * std::cos(arm_rad),
-                 pivot_.y() - r_inner * std::sin(arm_rad));
-    QPointF tip(pivot_.x() + (geometry_.radius - 8) * std::cos(arm_rad),
-                pivot_.y() - (geometry_.radius - 8) * std::sin(arm_rad));
+    const float arm_cos = std::cos(arm_rad);
+    const float arm_sin = std::sin(arm_rad);
+
+    QPointF base(pivot_.x() + r_inner * arm_cos,
+                 pivot_.y() - r_inner * arm_sin);
+    QPointF tip(pivot_.x() + (geometry_.radius - 8) * arm_cos,
+                pivot_.y() - (geometry_.radius - 8) * arm_sin);
 
     p.setPen(QPen(QColor(60, 35, 5, 70), 3, Qt::SolidLine, Qt::RoundCap));
     p.drawLine(base + QPointF(1.5, 1.5), tip + QPointF(1.5, 1.5));
@@ -258,7 +285,7 @@ void BeatMeterWidget::paintEvent(QPaintEvent*)
     p.drawLine(base, tip);
 
     p.setPen(QPen(QColor(180, 50, 20), 3, Qt::SolidLine, Qt::RoundCap));
-    QPointF tip_base(geometry_.cx + (geometry_.radius - 28) * std::cos(arm_rad),
-                     geometry_.py - (geometry_.radius - 28) * std::sin(arm_rad));
+    QPointF tip_base(geometry_.cx + (geometry_.radius - 28) * arm_cos,
+                     geometry_.py - (geometry_.radius - 28) * arm_sin);
     p.drawLine(tip_base, tip);
 }

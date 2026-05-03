@@ -44,7 +44,19 @@ PolyMetronome::PolyMetronome(QObject* parent)
     : QObject(parent)
     , audio_(new AudioEngine(this))
 {
-    connect(audio_, &AudioEngine::beat_tick, this, &PolyMetronome::beat_tick);
+}
+
+qint64 PolyMetronome::processed_samples() const
+{
+    return audio_->processed_samples();
+}
+
+std::optional<PolyMetronome::TickInfo> PolyMetronome::pop_ticks_through(qint64 sample_index)
+{
+    auto t = audio_->pop_ticks_through(sample_index);
+    if (!t)
+        return std::nullopt;
+    return TickInfo{ t->measure, t->beat };
 }
 
 PolyMetronome::~PolyMetronome() = default;

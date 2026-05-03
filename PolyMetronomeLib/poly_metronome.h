@@ -5,6 +5,7 @@
 
 #include <QJsonObject>
 #include <QObject>
+#include <optional>
 
 class AudioEngine;
 
@@ -50,8 +51,9 @@ public:
     void set_mono_mode(bool on);
     void set_count_in(int beats);
 
-signals:
-    void beat_tick(int measure_index, int beat_within_measure);
+    struct TickInfo { int measure; int beat; };
+    qint64 processed_samples() const;
+    std::optional<TickInfo> pop_ticks_through(qint64 sample_index);
 
 private:
     AudioEngine* audio_ = nullptr;

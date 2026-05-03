@@ -3,9 +3,11 @@
 #include "meter.h"
 
 #include <QAudioFormat>
+#include <QElapsedTimer>
 #include <QIODevice>
 #include <QMutex>
 #include <array>
+#include <optional>
 #include <vector>
 
 class QAudioSink;
@@ -43,8 +45,9 @@ public:
     bool isSequential() const override { return true; }
     qint64 bytesAvailable() const override;
 
-signals:
-    void beat_tick(int measure_index, int beat_within_measure);
+    struct TickInfo { int measure; int beat; };
+    qint64 processed_samples() const;
+    std::optional<TickInfo> pop_ticks_through(qint64 sample_index);
 
 protected:
     qint64 readData(char* data, qint64 max_len) override;
@@ -63,6 +66,8 @@ private:
 
     void rebuild_click_samples();
     void recompute_sps_locked();
+    void recompute_tick_sps_locked();
+    void schedule_ticks_to_locked(qint64 target_sample);
     const MeasureSpec& current_measure_locked() const;
     bool is_group_boundary_locked(int beat_in_measure) const;
 
@@ -92,4 +97,18 @@ private:
     double count_in_sps_ = 0.0;
     uint32_t dither_state_ = 0x12345678u;
     double keepalive_phase_ = 0.0;
+
+    struct ScheduledTick { qint64 play_sample; int measure; int beat; };
+    std::vector<ScheduledTick> pending_ticks_;
+
+    int      tick_seq_measure_idx_ = 0;
+    size_t   tick_subticks_in_measure_ = 0;
+    size_t   tick_anchor_position_ = 0;
+    double   tick_samples_per_subtick_ = 0.0;
+    int      tick_count_in_subtick_ = 0;
+    double   tick_count_in_sps_ = 0.0;
+    size_t   tick_count_in_anchor_ = 0;
+
+    QElapsedTimer wall_clock_;
+    qint64 wall_clock_offset_samples_ = 0;
 };

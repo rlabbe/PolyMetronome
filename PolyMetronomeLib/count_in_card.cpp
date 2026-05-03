@@ -4,17 +4,22 @@
 #include <QPainter>
 #include <QWheelEvent>
 
-static constexpr int kArrowW = 14;
-static constexpr float kAW = 8.0f;
-static constexpr float kAH = 6.0f;
-static constexpr int kCardSize = 80;
+static constexpr int k_card_size = 80;
+static constexpr int k_arrow_strip_width = 14;
+static constexpr float k_arrow_half_width = 4.0f;
+static constexpr float k_arrow_height = 6.0f;
+static constexpr int k_arrow_y_offset = 10;
+static constexpr int k_card_pad = 2;
+static constexpr int k_label_height = 18;
+static constexpr int k_big_font_inc = 24;
 
 CountInCard::CountInCard(QWidget* parent)
     : QWidget(parent)
 {
-    setMinimumSize(kCardSize, kCardSize);
-    setMaximumSize(kCardSize, kCardSize);
+    setMinimumSize(k_card_size, k_card_size);
+    setMaximumSize(k_card_size, k_card_size);
     setMouseTracking(true);
+    compute_layout();
 }
 
 void CountInCard::set_value(int v)
@@ -29,12 +34,22 @@ void CountInCard::set_value(int v)
 
 QSize CountInCard::sizeHint() const
 {
-    return QSize(kCardSize, kCardSize);
+    return QSize(k_card_size, k_card_size);
+}
+
+void CountInCard::compute_layout()
+{
+    layout_.card_rect = QRectF(0, 0, k_card_size, k_card_size).adjusted(k_card_pad, k_card_pad, -k_card_pad, -k_card_pad);
+    layout_.number_center_y = static_cast<int>(layout_.card_rect.center().y());
+
+    float arrow_x = static_cast<float>(layout_.card_rect.right()) - k_arrow_strip_width / 2.0f;
+    layout_.up_arrow_tip = QPointF(arrow_x, layout_.number_center_y - k_arrow_y_offset);
+    layout_.down_arrow_tip = QPointF(arrow_x, layout_.number_center_y + k_arrow_y_offset);
 }
 
 CountInCard::Zone CountInCard::zone_at(QPoint p) const
 {
-    if (p.x() < width() - kArrowW)
+    if (p.x() < width() - k_arrow_strip_width)
         return Zone::None;
     return p.y() < height() / 2 ? Zone::Up : Zone::Down;
 }
@@ -44,58 +59,50 @@ void CountInCard::paintEvent(QPaintEvent*)
     QPainter p(this);
     p.setRenderHint(QPainter::Antialiasing);
 
-    QRectF r = QRectF(rect()).adjusted(2.0, 2.0, -2.0, -2.0);
-    QRectF nr = r.adjusted(0, 0, -kArrowW, 0);
+    bool any_hovered = (hover_zone_ != Zone::None);
+    QColor background_color = any_hovered ? QColor(60, 65, 75) : QColor(45, 48, 55);
+    QColor border_color = any_hovered ? QColor(120, 160, 200) : QColor(80, 85, 95);
+    p.setPen(QPen(border_color, 1.5));
+    p.setBrush(background_color);
+    p.drawRoundedRect(layout_.card_rect, 5, 5);
 
-    bool hovered = (hover_zone_ != Zone::None);
-    QColor bg = hovered ? QColor(60, 65, 75) : QColor(45, 48, 55);
-    QColor border = hovered ? QColor(120, 160, 200) : QColor(80, 85, 95);
-    p.setPen(QPen(border, 1.5));
-    p.setBrush(bg);
-    p.drawRoundedRect(r, 5, 5);
-
-    QFont big = font();
-    big.setPointSize(big.pointSize() + 24);
-    big.setBold(true);
-    QFont small = font();
-
-    static constexpr int kLabelH = 18;
+    QFont big_font = font();
+    big_font.setPointSize(big_font.pointSize() + k_big_font_inc);
+    big_font.setBold(true);
+    QFont label_font = font();
 
     // "count in" at top, centered across full card width
-    p.setFont(small);
+    p.setFont(label_font);
     p.setPen(QColor(160, 165, 175));
-    p.drawText(QRectF(r.left(), r.top(), r.width(), kLabelH),
+    p.drawText(QRectF(layout_.card_rect.left(), layout_.card_rect.top(), layout_.card_rect.width(), k_label_height),
                Qt::AlignHCenter | Qt::AlignVCenter, "count in");
 
     // Number centered in the full card
-    QFontMetrics fm(big);
-    int big_h = fm.height();
-    int num_cy = static_cast<int>(r.center().y());
-    int num_y = num_cy - big_h / 2;
-    p.setFont(big);
+    QFontMetrics metrics(big_font);
+    int big_text_height = metrics.height();
+    int number_top = layout_.number_center_y - big_text_height / 2;
+    p.setFont(big_font);
     p.setPen(QColor(230, 230, 235));
-    p.drawText(QRect(static_cast<int>(r.left()), num_y, static_cast<int>(r.width()), big_h),
+    p.drawText(QRect(static_cast<int>(layout_.card_rect.left()), number_top, static_cast<int>(layout_.card_rect.width()), big_text_height),
                Qt::AlignHCenter | Qt::AlignTop, QString::number(value_));
 
     auto arrow_color = [&](Zone z) {
         return hover_zone_ == z ? QColor(200, 220, 255) : QColor(110, 115, 130);
     };
-    float ax = static_cast<float>(r.right()) - kArrowW / 2.0f;
-    float num_cyf = static_cast<float>(num_cy);
 
     auto draw = [&](QPointF tip, bool up, QColor color) {
         QPolygonF tri;
         if (up)
-            tri << tip << QPointF(tip.x() - kAW / 2, tip.y() + kAH) << QPointF(tip.x() + kAW / 2, tip.y() + kAH);
+            tri << tip << QPointF(tip.x() - k_arrow_half_width, tip.y() + k_arrow_height) << QPointF(tip.x() + k_arrow_half_width, tip.y() + k_arrow_height);
         else
-            tri << tip << QPointF(tip.x() - kAW / 2, tip.y() - kAH) << QPointF(tip.x() + kAW / 2, tip.y() - kAH);
+            tri << tip << QPointF(tip.x() - k_arrow_half_width, tip.y() - k_arrow_height) << QPointF(tip.x() + k_arrow_half_width, tip.y() - k_arrow_height);
         p.setPen(Qt::NoPen);
         p.setBrush(color);
         p.drawPolygon(tri);
     };
 
-    draw(QPointF(ax, num_cyf - 10), true, arrow_color(Zone::Up));
-    draw(QPointF(ax, num_cyf + 10), false, arrow_color(Zone::Down));
+    draw(layout_.up_arrow_tip, true, arrow_color(Zone::Up));
+    draw(layout_.down_arrow_tip, false, arrow_color(Zone::Down));
 }
 
 void CountInCard::mousePressEvent(QMouseEvent* e)

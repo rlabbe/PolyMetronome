@@ -146,7 +146,7 @@ MeterEditDialog::MeterEditDialog(const MeasureSpec& spec, bool can_delete, QWidg
     beats_->set_range(1, 32);
     beats_->set_field_height(field_height);
     beats_->set_font_for_field(big);
-    beats_->set_value(spec.numerator);
+    beats_->set_value(spec.beats);
 
     auto* note_value_row = new QWidget(this);
     auto* note_value_layout = new QHBoxLayout(note_value_row);
@@ -160,7 +160,7 @@ MeterEditDialog::MeterEditDialog(const MeasureSpec& spec, bool can_delete, QWidg
         b->setFont(big);
         b->setMinimumHeight(field_height);
         b->setMinimumWidth(36);
-        if (d == spec.denominator)
+        if (d == spec.note_value)
             b->setChecked(true);
         note_value_group_->addButton(b, d);
         note_value_layout->addWidget(b);
@@ -228,11 +228,11 @@ int MeterEditDialog::current_note_value() const
 MeasureSpec MeterEditDialog::measure() const
 {
     MeasureSpec m;
-    m.numerator = beats_->value() > 0 ? beats_->value() : 4;
-    m.denominator = current_note_value();
+    m.beats = beats_->value() > 0 ? beats_->value() : 4;
+    m.note_value = current_note_value();
     m.repeat = repeat_->value();
     bool g_ok = false;
-    m.grouping = Grouping::parse(grouping_->text(), m.numerator, &g_ok);
+    m.grouping = Grouping::parse(grouping_->text(), m.beats, &g_ok);
     if (!g_ok)
         m.grouping = Grouping{};
     return m;
