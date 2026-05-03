@@ -36,7 +36,6 @@ protected:
 private slots:
     void on_card_clicked(int index);
     void on_add_clicked();
-    void on_preset_apply();
 
 private:
     void rebuild_cards();

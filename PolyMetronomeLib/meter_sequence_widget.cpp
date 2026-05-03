@@ -27,16 +27,6 @@ MeterSequenceWidget::MeterSequenceWidget(QWidget* parent)
     auto* main = new QVBoxLayout(this);
     main->setContentsMargins(0, 0, 0, 0);
 
-    auto* preset_row = new QHBoxLayout;
-    preset_row->addWidget(new QLabel("Preset:", this));
-    preset_combo_ = new QComboBox(this);
-    for (const auto& p : PresetLibrary::all())
-        preset_combo_->addItem(p.name);
-    preset_apply_ = new QPushButton("Apply", this);
-    preset_row->addWidget(preset_combo_, 1);
-    preset_row->addWidget(preset_apply_);
-    main->addLayout(preset_row);
-
     scroll_ = new QScrollArea(this);
     scroll_->setWidgetResizable(true);
     scroll_->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
@@ -65,8 +55,6 @@ MeterSequenceWidget::MeterSequenceWidget(QWidget* parent)
     pal.setColor(QPalette::Window, QColor(80, 160, 240));
     drop_indicator_->setPalette(pal);
     drop_indicator_->hide();
-
-    connect(preset_apply_, &QPushButton::clicked, this, &MeterSequenceWidget::on_preset_apply);
 
     sequence_ = MeterSequence::default_4_4();
     rebuild_cards();
@@ -159,16 +147,6 @@ void MeterSequenceWidget::on_add_clicked()
     emit sequence_changed(sequence_);
 }
 
-void MeterSequenceWidget::on_preset_apply()
-{
-    int idx = preset_combo_->currentIndex();
-    const auto& presets = PresetLibrary::all();
-    if (idx < 0 || idx >= static_cast<int>(presets.size()))
-        return;
-    sequence_ = presets[idx].sequence;
-    rebuild_cards();
-    emit sequence_changed(sequence_);
-}
 
 bool MeterSequenceWidget::eventFilter(QObject* watched, QEvent* event)
 {
