@@ -18,12 +18,17 @@
 // into pending_ticks_ for ~2 s past the current buffer-fill position on
 // every readData call, and the queue is pre-filled with 2 s at start().
 //
-// processed_samples() is wall-clock-derived (QElapsedTimer started at
-// sink_->start()), so it advances continuously at real time. The widget
-// polls it and pop_ticks_through() returns the oldest queued tick whose
-// play_sample <= played. Because the queue is always populated 2 s ahead
-// of audio, each tick crosses the threshold at its true wall-clock instant
-// rather than at a buffer-pull boundary.
+// processed_samples() reports the sink's actual playback position. The raw
+// sink_->processedUSecs() value updates in chunks (per device buffer commit),
+// so we linearly extrapolate between updates using a wall clock anchored at
+// sink_->start(). The result advances smoothly at real time AND tracks the
+// device's true output position, so the widget's LED/needle transitions
+// land at the same instant the corresponding click is heard.
+//
+// The widget polls processed_samples() and pop_ticks_through() returns the
+// oldest queued tick whose play_sample <= played. Because the queue is
+// always populated 2 s ahead of audio, each tick crosses the threshold at
+// its true playback instant rather than at a buffer-pull boundary.
 
 #include "audio_engine.h"
 
@@ -67,6 +72,10 @@ AudioEngine::AudioEngine(QObject* parent)
     recompute_sps_locked();
 
     sink_ = new QAudioSink(device, format_, this);
+    // A massive buffer (like 192k / 4 seconds) causes priming glitches on many drivers.
+    // We set a 200ms buffer which is standard for low-latency interactive audio.
+    sink_->setBufferSize(sample_rate_ * 0.2 * format_.bytesPerFrame());
+
     connect(sink_, &QAudioSink::stateChanged, this, [this](QAudio::State s) {
         qInfo() << "AudioEngine: sink state ->" << s << "error=" << sink_->error();
     });
@@ -115,7 +124,9 @@ void AudioEngine::recompute_sps_locked()
         note_value = 4;
     // Sub-tick is 1/60 of a beat. A beat is 1/note_value of a whole note.
     // BPM = quarter notes per minute (always). So time per beat = (60/bpm)*(4/note_value) sec.
-    samples_per_subtick_ = sample_rate_ * 4.0 / static_cast<double>(bpm_ * note_value);
+    // Samples per subtick = (SR * 60/BPM * 4/note_value) / 60
+    samples_per_subtick_ = (sample_rate_ * 4.0) / static_cast<double>(bpm_ * note_value);
+    qDebug() << "AudioEngine: recompute_sps_locked bpm=" << bpm_ << "nv=" << note_value << "sps=" << samples_per_subtick_;
 }
 
 void AudioEngine::recompute_tick_sps_locked()
@@ -125,7 +136,7 @@ void AudioEngine::recompute_tick_sps_locked()
     int note_value = 4;
     if (auto* m = sequence_.at_absolute(tick_seq_measure_idx_))
         note_value = m->note_value > 0 ? m->note_value : 4;
-    tick_samples_per_subtick_ = sample_rate_ * 4.0 / static_cast<double>(bpm_ * note_value);
+    tick_samples_per_subtick_ = (sample_rate_ * 4.0) / static_cast<double>(bpm_ * note_value);
 }
 
 void AudioEngine::schedule_ticks_to_locked(qint64 target_sample)
@@ -195,10 +206,11 @@ void AudioEngine::start()
         // split accent/beat across buffers. 250 ms is comfortably past any
         // typical sink buffer and double-pull window.
         int initial_offset = sample_rate_ / 4;
-        count_in_sps_ = sample_rate_ * 60.0 / static_cast<double>(bpm_ * subs_per_beat_);
+        // Count-in uses quarter-note beats. Samples per subtick (1/60th of a quarter note).
+        count_in_sps_ = static_cast<double>(sample_rate_) / static_cast<double>(bpm_);
         count_in_anchor_ = initial_offset;
         count_in_subtick_ = 0;
-        anchor_position_ = static_cast<size_t>(initial_offset + std::round(count_in_beats_ * subs_per_beat_ * count_in_sps_));
+        anchor_position_ = initial_offset + static_cast<size_t>(std::round(count_in_beats_ * subs_per_beat_ * count_in_sps_));
         seq_measure_idx_ = 0;
         subticks_in_measure_ = 0;
         keepalive_phase_ = 0.0;
@@ -214,10 +226,24 @@ void AudioEngine::start()
         tick_count_in_anchor_ = count_in_anchor_;
         recompute_tick_sps_locked();
         schedule_ticks_to_locked(static_cast<qint64>(initial_offset) + 2 * sample_rate_);
+
+        qDebug() << "AudioEngine::start anchor=" << anchor_position_ << "count_in=" << count_in_beats_;
     }
+
     open(QIODevice::ReadOnly);
     sink_->start(this);
+    // Initialize anchors before starting the sink to avoid race conditions 
+    // where readData() or processed_samples() runs before the baseline is set.
     wall_clock_.start();
+
+    // Capture the current sink position as the new "Zero". Many backends do not 
+    // reset processedUSecs() to 0 immediately, causing the UI to jump on restart.
+    last_processed_us_ = sink_->processedUSecs();
+    last_wall_ns_ = wall_clock_.nsecsElapsed();
+
+    open(QIODevice::ReadOnly);
+    sink_->start(this);
+
     qInfo() << "AudioEngine::start: sink state=" << sink_->state()
         << "error=" << sink_->error()
         << "bufferSize=" << sink_->bufferSize();
@@ -225,18 +251,64 @@ void AudioEngine::start()
 
 void AudioEngine::stop()
 {
+    qDebug() << "AudioEngine::stop";
+    sink_->reset();
     sink_->stop();
     close();
     QMutexLocker lock(&mutex_);
     active_clicks_.clear();
     pending_ticks_.clear();
+
+    // Reset all playback and scheduling cursors so that subsequent
+    // set_bpm/set_sequence calls while stopped operate on a clean slate.
+    position_samples_ = 0;
+    seq_measure_idx_ = 0;
+    subticks_in_measure_ = 0;
+    count_in_subtick_ = 0;
+    anchor_position_ = 0;
+    count_in_anchor_ = 0;
+
+    tick_seq_measure_idx_ = 0;
+    tick_subticks_in_measure_ = 0;
+    tick_count_in_subtick_ = 0;
+    tick_anchor_position_ = 0;
+    tick_count_in_anchor_ = 0;
+
+    // Explicitly reset the wall-clock anchors to prevent the UI from
+    // seeing a "time jump" when polling processed_samples() during restart.
+    last_processed_us_ = -1; // Reset to sentinel
+    last_wall_ns_ = 0;
 }
 
 qint64 AudioEngine::processed_samples() const
 {
-    if (!wall_clock_.isValid())
+    // Anchor on the sink's reported playback position (microseconds of audio
+    // actually delivered to the device). That value updates in chunks (one
+    // per buffer commit), so between updates we linearly extrapolate using
+    // the wall clock. This keeps the widget pacing tied to what's actually
+    // audible rather than to when sink_->start() was called.
+    if (!sink_ || !wall_clock_.isValid() || !is_running() || last_processed_us_ == -1)
         return 0;
-    return wall_clock_.nsecsElapsed() * static_cast<qint64>(sample_rate_) / 1'000'000'000;
+
+    qint64 pu = sink_->processedUSecs();
+
+    // If this is our first poll, or the sink hasn't moved yet, or the hardware
+    // performed a late reset (pu < last), anchor to current hardware time.
+    if (pu <= last_processed_us_) {
+        if (pu < last_processed_us_) { // Hardware reset its counter
+            last_processed_us_ = pu;
+            last_wall_ns_ = wall_clock_.nsecsElapsed();
+        }
+        return 0;
+    }
+
+    qint64 wall_ns = wall_clock_.nsecsElapsed();
+    if (pu != last_processed_us_) {
+        last_processed_us_ = pu;
+        last_wall_ns_ = wall_ns;
+    }
+    qint64 interp_us = pu + (wall_ns - last_wall_ns_) / 1000;
+    return interp_us * static_cast<qint64>(sample_rate_) / 1'000'000;
 }
 
 std::optional<AudioEngine::TickInfo> AudioEngine::pop_ticks_through(qint64 sample_index)
@@ -263,12 +335,14 @@ void AudioEngine::set_bpm(int bpm)
     if (bpm == bpm_)
         return;
     bpm_ = bpm;
+    qDebug() << "AudioEngine::set_bpm" << bpm << "at pos" << position_samples_;
     recompute_sps_locked();
     anchor_position_ = position_samples_;
     subticks_in_measure_ = 0;
     tick_anchor_position_ = anchor_position_;
     tick_subticks_in_measure_ = 0;
     tick_seq_measure_idx_ = seq_measure_idx_;
+    tick_count_in_subtick_ = 0;
     pending_ticks_.clear();
     recompute_tick_sps_locked();
 }
@@ -300,6 +374,7 @@ void AudioEngine::set_sequence(const MeterSequence& seq)
     tick_seq_measure_idx_ = 0;
     tick_subticks_in_measure_ = 0;
     tick_anchor_position_ = anchor_position_;
+    tick_count_in_subtick_ = 0;
     pending_ticks_.clear();
     recompute_tick_sps_locked();
 }
@@ -344,6 +419,7 @@ qint64 AudioEngine::readData(char* data, qint64 max_len)
         c.gain = v;
         c.type = t;
         active_clicks_.push_back(c);
+        qDebug() << "AudioEngine: Scheduled click type=" << t << "at spos=" << spos << "pos_samples=" << position_samples_;
     };
 
     size_t buffer_end = position_samples_ + n_frames;
@@ -372,22 +448,35 @@ qint64 AudioEngine::readData(char* data, qint64 max_len)
         if (spos >= position_samples_) {
             int sub_in_beat = static_cast<int>(subticks_in_measure_ % subs_per_beat_);
             int beat_in_measure = static_cast<int>(subticks_in_measure_ / subs_per_beat_);
-            // 60 sub-ticks per beat. Subdivisions are beat-relative:
-            //   0           : the beat (Beat click; Accent on beat 0; SubAccent on group starts)
-            //   30          : eighth offbeat (2 per beat)
-            //   15, 45      : sixteenth offbeats (4 per beat)
-            //   20, 40      : triplet offbeats (3 per beat)
-            //   12,24,36,48 : quintuplet offbeats (5 per beat)
+            // 60 sub-ticks per beat. Eighth/Sixteenth subdivision intervals
+            // depend on the measure's note value: a beat is one 1/note_value
+            // note, so the spacing of an eighth note in subticks is
+            // 60 * note_value / 8 (and similarly for sixteenths). When that
+            // spacing is >= 60 the subdivision coincides with (or is coarser
+            // than) the beat itself and is suppressed.
+            // Triplet/Quintuplet are always 3 / 5 even hits per beat.
+            int nv = m.note_value > 0 ? m.note_value : 4;
+            int eighth_step = 60 * nv / 8;
+            int sixteenth_step = 60 * nv / 16;
+            bool is_eighth_offbeat = (eighth_step > 0 && eighth_step < 60
+                                      && sub_in_beat % eighth_step == 0);
+            bool is_sixteenth_offbeat = (sixteenth_step > 0 && sixteenth_step < 60
+                                         && sub_in_beat % sixteenth_step == 0);
+
             if (sub_in_beat == 0) {
+                // Always schedule a standard beat click.
                 schedule(spos, Beat);
-                if (beat_in_measure == 0)
+
+                // Layer the accent on top for Beat 1 or group boundaries.
+                if (beat_in_measure == 0) {
                     schedule(spos, Accent);
-                else if (is_group_boundary_locked(beat_in_measure))
+                } else if (is_group_boundary_locked(beat_in_measure)) {
                     schedule(spos, Accent, 0.5f);
+                }
             }
-            else if (sub_in_beat == 30)
+            else if (is_eighth_offbeat)
                 schedule(spos, Eighth);
-            else if (sub_in_beat == 15 || sub_in_beat == 45)
+            else if (is_sixteenth_offbeat)
                 schedule(spos, Sixteenth);
             else if (sub_in_beat == 20 || sub_in_beat == 40)
                 schedule(spos, Triplet);

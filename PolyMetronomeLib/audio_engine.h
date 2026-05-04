@@ -110,5 +110,6 @@ private:
     size_t   tick_count_in_anchor_ = 0;
 
     QElapsedTimer wall_clock_;
-    qint64 wall_clock_offset_samples_ = 0;
+    mutable qint64 last_processed_us_ = 0;
+    mutable qint64 last_wall_ns_ = 0;
 };

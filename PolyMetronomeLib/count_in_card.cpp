@@ -15,6 +15,7 @@ static constexpr int k_big_font_inc = 24;
 
 CountInCard::CountInCard(QWidget* parent)
     : QWidget(parent)
+    , value_(0)
 {
     setMinimumSize(k_card_size, k_card_size);
     setMaximumSize(k_card_size, k_card_size);

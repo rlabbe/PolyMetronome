@@ -94,8 +94,8 @@ PolyMetronomeDialog::PolyMetronomeDialog(QWidget* parent)
     sixteenth_volume_ = make_slider(0);
     triplet_volume_ = make_slider(0);
     quintuplet_volume_ = make_slider(0);
-    accent_volume_ = make_slider(0);
-    master_volume_ = make_slider(80);
+    accent_volume_ = make_slider(100);
+    master_volume_ = make_slider(100);
 
     form->addRow("Beat", beat_volume_);
     form->addRow("Eighth", eighth_volume_);
