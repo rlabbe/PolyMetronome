@@ -5,7 +5,6 @@
 #include "meter_sequence_widget.h"
 #include "poly_metronome.h"
 
-#include <QDial>
 #include <QFormLayout>
 #include <QHBoxLayout>
 #include <QLabel>
@@ -13,6 +12,7 @@
 #include <QSlider>
 #include <QVBoxLayout>
 #include <QWidget>
+
 
 PolyMetronomeDialog::PolyMetronomeDialog(QWidget* parent)
     : QDialog(parent)
@@ -31,7 +31,7 @@ PolyMetronomeDialog::PolyMetronomeDialog(QWidget* parent)
     auto* form = new QFormLayout;
     form->setContentsMargins(0, 8, 0, 0);
 
-    bpm_dial_ = new QDial(this);
+    bpm_dial_ = new BpmDial(this);
     bpm_dial_->setRange(10, 240);
     bpm_dial_->setValue(60);
     bpm_dial_->setNotchesVisible(true);
@@ -56,9 +56,11 @@ PolyMetronomeDialog::PolyMetronomeDialog(QWidget* parent)
     bpm_inc->setFont(bpm_btn_font);
     connect(bpm_dec, &QPushButton::clicked, this, [this]() {
         bpm_dial_->setValue(bpm_dial_->value() - 1);
+        on_bpm_committed(bpm_dial_->value());
     });
     connect(bpm_inc, &QPushButton::clicked, this, [this]() {
         bpm_dial_->setValue(bpm_dial_->value() + 1);
+        on_bpm_committed(bpm_dial_->value());
     });
 
     auto* bpm_row = new QWidget(this);
@@ -122,6 +124,7 @@ PolyMetronomeDialog::PolyMetronomeDialog(QWidget* parent)
 
     connect(meter_widget_, &MeterSequenceWidget::sequence_changed, this, &PolyMetronomeDialog::on_sequence_changed);
     connect(bpm_dial_, &QDial::valueChanged, this, &PolyMetronomeDialog::on_bpm_changed);
+    connect(bpm_dial_, &BpmDial::value_committed, this, &PolyMetronomeDialog::on_bpm_committed);
     connect(master_volume_, &QSlider::valueChanged, this, &PolyMetronomeDialog::on_master_volume_changed);
     connect(beat_volume_, &QSlider::valueChanged, this, &PolyMetronomeDialog::on_beat_volume_changed);
     connect(eighth_volume_, &QSlider::valueChanged, this, &PolyMetronomeDialog::on_eighth_volume_changed);
@@ -136,6 +139,7 @@ PolyMetronomeDialog::PolyMetronomeDialog(QWidget* parent)
 
     on_sequence_changed(meter_widget_->sequence());
     on_bpm_changed(bpm_dial_->value());
+    on_bpm_committed(bpm_dial_->value());
     on_master_volume_changed(master_volume_->value());
     on_beat_volume_changed(beat_volume_->value());
     on_eighth_volume_changed(eighth_volume_->value());
@@ -252,10 +256,28 @@ void PolyMetronomeDialog::on_start_stop_clicked()
 
 void PolyMetronomeDialog::on_bpm_changed(int bpm)
 {
-    metronome_->set_bpm(bpm);
     bpm_label_->setText(QString::number(bpm));
     beat_meter_->set_bpm(bpm);
+}
+
+void PolyMetronomeDialog::on_bpm_committed(int bpm)
+{
+    metronome_->set_bpm(bpm);
     emit state_changed();
+}
+
+void PolyMetronomeDialog::keyPressEvent(QKeyEvent* event)
+{
+    if (event->key() == Qt::Key_M)
+        on_start_stop_clicked();
+    else
+        QDialog::keyPressEvent(event);
+}
+
+void PolyMetronomeDialog::send_key_command(Qt::Key key)
+{
+    if (key == Qt::Key_M)
+        on_start_stop_clicked();
 }
 
 void PolyMetronomeDialog::on_master_volume_changed(int v)

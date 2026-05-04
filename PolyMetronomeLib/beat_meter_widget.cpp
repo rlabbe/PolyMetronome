@@ -33,6 +33,7 @@ static constexpr int   kFrameIntervalMs = 16;
 static constexpr float kMaxSwing = 38.0f;   // degrees either side of vertical
 static constexpr int   kW = 210;
 static constexpr int   kNeedleH = 160;     // fixed height of needle/arc region
+static constexpr int   kTopPad = 8;        // gap above arc top
 static constexpr int   kRowH = 14;      // height per LED row
 static constexpr int   kRowPad = 7;       // padding above and below LED rows
 
@@ -112,8 +113,7 @@ void BeatMeterWidget::compute_geometry()
     geometry_.radius = std::min(geometry_.cx - 12.0f, 80.0f);
     geometry_.led_gap = 14.0f;
     geometry_.led_r = 5.0f;
-    float content_h = geometry_.radius + geometry_.led_gap + geometry_.led_r;
-    geometry_.py = (kNeedleH - content_h) / 2.0f + geometry_.radius;
+    geometry_.py = geometry_.radius + kTopPad;
     geometry_.rows_top = geometry_.py + kRowPad;
     pivot_ = QPointF(geometry_.cx, geometry_.py);
 }
@@ -150,15 +150,8 @@ void BeatMeterWidget::build_static_cache()
     p.setBrush(Qt::NoBrush);
     p.drawRect(r.adjusted(1, 1, -1, -1));
 
-    // Scale arc filled chord
+    // Scale arc
     QRectF arc_rect(geometry_.cx - geometry_.radius, geometry_.py - geometry_.radius, 2 * geometry_.radius, 2 * geometry_.radius);
-    QPainterPath chord;
-    chord.moveTo(pivot_);
-    chord.arcTo(arc_rect, 0, 180);
-    chord.closeSubpath();
-    p.setPen(Qt::NoPen);
-    p.setBrush(QColor(160, 120, 10, 50));
-    p.drawPath(chord);
 
     // Arc outline
     p.setPen(QPen(QColor(80, 52, 5), 1.5));

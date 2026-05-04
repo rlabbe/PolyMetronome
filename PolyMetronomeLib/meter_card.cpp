@@ -10,7 +10,8 @@
 #include <QPixmap>
 #include <algorithm>
 
-static constexpr int k_card_size = 80;
+static constexpr int k_card_w = 72;
+static constexpr int k_card_h = 80;
 static constexpr int k_arrow_strip_width = 14;
 static constexpr float k_arrow_half_width = 4.0f;
 static constexpr float k_arrow_height = 6.0f;
@@ -23,8 +24,8 @@ MeterCard::MeterCard(QWidget* parent)
 {
     setMouseTracking(true);
     setCursor(Qt::PointingHandCursor);
-    setMinimumSize(k_card_size, k_card_size);
-    setMaximumSize(k_card_size, k_card_size);
+    setMinimumSize(k_card_w, k_card_h);
+    setMaximumSize(k_card_w, k_card_h);
     compute_layout();
 }
 
@@ -36,12 +37,12 @@ void MeterCard::set_measure(const MeasureSpec& m)
 
 QSize MeterCard::sizeHint() const
 {
-    return QSize(k_card_size, k_card_size);
+    return QSize(k_card_w, k_card_h);
 }
 
 void MeterCard::compute_layout()
 {
-    layout_.card_rect = QRectF(0, 0, k_card_size, k_card_size).adjusted(k_card_pad, k_card_pad, -k_card_pad, -k_card_pad);
+    layout_.card_rect = QRectF(0, 0, k_card_w, k_card_h).adjusted(k_card_pad, k_card_pad, -k_card_pad, -k_card_pad);
     layout_.numbers_rect = layout_.card_rect.adjusted(0, 0, -k_arrow_strip_width, 0);
 
     QFont big_font = font();
@@ -62,6 +63,12 @@ void MeterCard::compute_layout()
 
 MeterCard::Zone MeterCard::zone_at(QPoint p) const
 {
+    if (deletable_) {
+        QRect del(static_cast<int>(layout_.card_rect.left()),
+                  static_cast<int>(layout_.card_rect.bottom()) - 14, 14, 14);
+        if (del.contains(p))
+            return Zone::DeleteX;
+    }
     if (p.x() < width() - k_arrow_strip_width)
         return Zone::None;
     if (p.y() < layout_.divider_y)
@@ -142,6 +149,16 @@ void MeterCard::paintEvent(QPaintEvent*)
         }
     }
 
+    if (deletable_) {
+        QRect del(static_cast<int>(layout_.card_rect.left()),
+                  static_cast<int>(layout_.card_rect.bottom()) - 14, 14, 14);
+        QColor x_color = hover_zone_ == Zone::DeleteX ? QColor(255, 90, 80) : QColor(130, 60, 55);
+        p.setPen(QPen(x_color, 1.5, Qt::SolidLine, Qt::RoundCap));
+        QRectF xr = QRectF(del).adjusted(3, 3, -3, -3);
+        p.drawLine(xr.topLeft(), xr.bottomRight());
+        p.drawLine(xr.topRight(), xr.bottomLeft());
+    }
+
     // Arrow strip — positions come from cached layout (also used by zone_at)
     auto arrow_color = [&](Zone z) {
         return hover_zone_ == z ? QColor(200, 220, 255) : QColor(110, 115, 130);
@@ -194,6 +211,10 @@ void MeterCard::mouseReleaseEvent(QMouseEvent* e)
     static constexpr int n_note_values = 6;
 
     Zone z = zone_at(press_pos_);
+    if (z == Zone::DeleteX && zone_at(e->pos()) == Zone::DeleteX) {
+        emit delete_requested();
+        return;
+    }
     switch (z) {
     case Zone::BeatsUp:
         measure_.beats = std::min(32, measure_.beats + 1);

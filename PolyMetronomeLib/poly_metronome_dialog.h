@@ -4,9 +4,26 @@
 #include "poly_metronome.h"
 #include "poly_metronome_export.h"
 
+#include <QDial>
 #include <QDialog>
+#include <QKeyEvent>
+#include <QMouseEvent>
 
-class QDial;
+class BpmDial : public QDial
+{
+    Q_OBJECT
+public:
+    using QDial::QDial;
+signals:
+    void value_committed(int value);
+protected:
+    void mouseReleaseEvent(QMouseEvent* e) override
+    {
+        QDial::mouseReleaseEvent(e);
+        emit value_committed(value());
+    }
+};
+
 class QLabel;
 class QPushButton;
 class QSlider;
@@ -25,6 +42,7 @@ public:
 
     PolyMetronomeState state() const;
     void apply_state(const PolyMetronomeState& s);
+    void send_key_command(Qt::Key key);
 
 signals:
     void state_changed();
@@ -32,10 +50,12 @@ signals:
 protected:
     void closeEvent(QCloseEvent* event) override;
     void hideEvent(QHideEvent* event) override;
+    void keyPressEvent(QKeyEvent* event) override;
 
 private slots:
     void on_start_stop_clicked();
     void on_bpm_changed(int bpm);
+    void on_bpm_committed(int bpm);
     void on_master_volume_changed(int v);
     void on_beat_volume_changed(int v);
     void on_eighth_volume_changed(int v);
@@ -49,7 +69,7 @@ private slots:
 private:
     PolyMetronome* metronome_ = nullptr;
     MeterSequenceWidget* meter_widget_ = nullptr;
-    QDial* bpm_dial_ = nullptr;
+    BpmDial* bpm_dial_ = nullptr;
     QLabel* bpm_label_ = nullptr;
     QSlider* master_volume_ = nullptr;
     QSlider* beat_volume_ = nullptr;

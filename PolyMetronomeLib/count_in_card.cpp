@@ -4,7 +4,8 @@
 #include <QPainter>
 #include <QWheelEvent>
 
-static constexpr int k_card_size = 80;
+static constexpr int k_card_w = 72;
+static constexpr int k_card_h = 80;
 static constexpr int k_arrow_strip_width = 14;
 static constexpr float k_arrow_half_width = 4.0f;
 static constexpr float k_arrow_height = 6.0f;
@@ -17,8 +18,8 @@ CountInCard::CountInCard(QWidget* parent)
     : QWidget(parent)
     , value_(0)
 {
-    setMinimumSize(k_card_size, k_card_size);
-    setMaximumSize(k_card_size, k_card_size);
+    setMinimumSize(k_card_w, k_card_h);
+    setMaximumSize(k_card_w, k_card_h);
     setMouseTracking(true);
     compute_layout();
 }
@@ -35,12 +36,12 @@ void CountInCard::set_value(int v)
 
 QSize CountInCard::sizeHint() const
 {
-    return QSize(k_card_size, k_card_size);
+    return QSize(k_card_w, k_card_h);
 }
 
 void CountInCard::compute_layout()
 {
-    layout_.card_rect = QRectF(0, 0, k_card_size, k_card_size).adjusted(k_card_pad, k_card_pad, -k_card_pad, -k_card_pad);
+    layout_.card_rect = QRectF(0, 0, k_card_w, k_card_h).adjusted(k_card_pad, k_card_pad, -k_card_pad, -k_card_pad);
     layout_.number_center_y = static_cast<int>(layout_.card_rect.center().y());
 
     float arrow_x = static_cast<float>(layout_.card_rect.right()) - k_arrow_strip_width / 2.0f;

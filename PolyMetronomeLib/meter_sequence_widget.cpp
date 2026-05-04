@@ -42,9 +42,25 @@ MeterSequenceWidget::MeterSequenceWidget(QWidget* parent)
     cards_layout_->setContentsMargins(8, 8, 8, 8);
     cards_layout_->addStretch();
     scroll_->setWidget(cards_container_);
+    add_btn_ = new QPushButton("+", this);
+    add_btn_->setFixedSize(50, 80);
+    QFont f = add_btn_->font();
+    f.setPointSize(f.pointSize() + 6);
+    f.setBold(true);
+    add_btn_->setFont(f);
+    add_btn_->setToolTip("Add measure");
+    add_btn_->setStyleSheet(
+        "QPushButton { background-color: rgb(45,48,55); color: rgb(230,230,235);"
+        "  border: 1.5px solid rgb(80,85,95); border-radius: 5px; outline: none; }"
+        "QPushButton:hover { background-color: rgb(60,65,75); border-color: rgb(120,160,200); }"
+        "QPushButton:focus { outline: none; border-color: rgb(80,85,95); }"
+    );
+    connect(add_btn_, &QPushButton::clicked, this, &MeterSequenceWidget::on_add_clicked);
+
     cards_row_ = new QHBoxLayout;
     cards_row_->setContentsMargins(0, 0, 0, 0);
     cards_row_->setSpacing(6);
+    cards_row_->addWidget(add_btn_);
     cards_row_->addWidget(scroll_, 1);
     main->addLayout(cards_row_);
 
@@ -79,10 +95,6 @@ void MeterSequenceWidget::rebuild_cards()
     for (auto* c : cards_)
         c->deleteLater();
     cards_.clear();
-    if (add_btn_) {
-        add_btn_->deleteLater();
-        add_btn_ = nullptr;
-    }
     while (QLayoutItem* item = cards_layout_->takeAt(0))
         delete item;
 
@@ -90,8 +102,16 @@ void MeterSequenceWidget::rebuild_cards()
         auto* card = new MeterCard(cards_container_);
         card->set_measure(sequence_.measures[i]);
         card->set_index(static_cast<int>(i));
+        card->set_deletable(i > 0);
         int captured_index = static_cast<int>(i);
         connect(card, &MeterCard::clicked, this, [this, captured_index]() { on_card_clicked(captured_index); });
+        connect(card, &MeterCard::delete_requested, this, [this, captured_index]() {
+            if (captured_index < static_cast<int>(sequence_.measures.size()) && sequence_.measures.size() > 1) {
+                sequence_.measures.erase(sequence_.measures.begin() + captured_index);
+                rebuild_cards();
+                emit sequence_changed(sequence_);
+            }
+        });
         connect(card, &MeterCard::measure_changed, this, [this, captured_index](const MeasureSpec& m) {
             if (captured_index < static_cast<int>(sequence_.measures.size())) {
                 sequence_.measures[captured_index] = m;
@@ -102,15 +122,6 @@ void MeterSequenceWidget::rebuild_cards()
         cards_.push_back(card);
     }
 
-    add_btn_ = new QPushButton("+", cards_container_);
-    add_btn_->setFixedSize(50, 80);
-    QFont f = add_btn_->font();
-    f.setPointSize(f.pointSize() + 6);
-    f.setBold(true);
-    add_btn_->setFont(f);
-    add_btn_->setToolTip("Add measure");
-    connect(add_btn_, &QPushButton::clicked, this, &MeterSequenceWidget::on_add_clicked);
-    cards_layout_->addWidget(add_btn_);
     cards_layout_->addStretch();
 
     drop_indicator_->raise();

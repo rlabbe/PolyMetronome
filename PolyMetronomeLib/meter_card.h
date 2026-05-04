@@ -17,12 +17,14 @@ public:
 
     void set_index(int i) { index_ = i; }
     int index() const { return index_; }
+    void set_deletable(bool d) { deletable_ = d; update(); }
 
     QSize sizeHint() const override;
 
 signals:
     void clicked();
     void measure_changed(const MeasureSpec& m);
+    void delete_requested();
 
 protected:
     void paintEvent(QPaintEvent*) override;
@@ -33,7 +35,7 @@ protected:
     void leaveEvent(QEvent* e) override;
 
 private:
-    enum class Zone { None, BeatsUp, BeatsDown, NoteUp, NoteDown };
+    enum class Zone { None, BeatsUp, BeatsDown, NoteUp, NoteDown, DeleteX };
 
     struct Layout {
         QRectF card_rect;            // padded outer rect
@@ -54,6 +56,7 @@ private:
     Layout layout_;
     MeasureSpec measure_;
     bool hovered_ = false;
+    bool deletable_ = false;
     Zone hover_zone_ = Zone::None;
     int index_ = -1;
     QPoint press_pos_;
