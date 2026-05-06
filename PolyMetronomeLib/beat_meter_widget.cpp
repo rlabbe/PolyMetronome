@@ -29,7 +29,7 @@
 #include <cmath>
 #include <numbers>
 
-static constexpr int   kFrameIntervalMs = 16;
+static constexpr int   kFrameIntervalMs = 4;
 static constexpr float kMaxSwing = 38.0f;   // degrees either side of vertical
 static constexpr int   kW = 210;
 static constexpr int   kNeedleH = 160;     // fixed height of needle/arc region

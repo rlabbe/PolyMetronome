@@ -6,7 +6,9 @@
 #include <QElapsedTimer>
 #include <QIODevice>
 #include <QMutex>
+#include <QThread>
 #include <array>
+#include <atomic>
 #include <optional>
 #include <vector>
 
@@ -55,6 +57,7 @@ protected:
 
 private:
     static constexpr int subs_per_beat_ = 60;
+    static constexpr size_t ring_capacity_ = 256 * 1024;
 
     struct ActiveClick
     {
@@ -70,15 +73,29 @@ private:
     void schedule_ticks_to_locked(qint64 target_sample);
     const MeasureSpec& current_measure_locked() const;
     bool is_group_boundary_locked(int beat_in_measure) const;
+    void create_sink();
+    void destroy_sink();
+    void produce_audio();
 
-    QAudioSink* sink_ = nullptr;
     QAudioFormat format_;
     int sample_rate_ = 44100;
+    QAudioSink* sink_ = nullptr;
 
     std::array<std::vector<float>, NumTypes> click_samples_;
     std::vector<float> mono_sample_;
     std::vector<ActiveClick> active_clicks_;
     std::vector<float> scratch_;
+
+    // Ring buffer: producer writes formatted bytes, readData copies them out.
+    // Single-producer single-consumer with atomic cursors — no lock needed on
+    // the data path.
+    std::vector<char> ring_;
+    std::atomic<size_t> ring_write_{0};
+    std::atomic<size_t> ring_read_{0};
+
+    // Producer thread
+    QThread* producer_thread_ = nullptr;
+    std::atomic<bool> producing_{false};
 
     mutable QMutex mutex_;
     int bpm_ = 60;
@@ -101,15 +118,19 @@ private:
     struct ScheduledTick { qint64 play_sample; int measure; int beat; };
     std::vector<ScheduledTick> pending_ticks_;
 
-    int      tick_seq_measure_idx_ = 0;
-    size_t   tick_subticks_in_measure_ = 0;
-    size_t   tick_anchor_position_ = 0;
-    double   tick_samples_per_subtick_ = 0.0;
-    int      tick_count_in_subtick_ = 0;
-    double   tick_count_in_sps_ = 0.0;
-    size_t   tick_count_in_anchor_ = 0;
+    int tick_seq_measure_idx_ = 0;
+    size_t tick_subticks_in_measure_ = 0;
+    size_t tick_anchor_position_ = 0;
+    double tick_samples_per_subtick_ = 0.0;
+    int tick_count_in_subtick_ = 0;
+    double tick_count_in_sps_ = 0.0;
+    size_t tick_count_in_anchor_ = 0;
 
     QElapsedTimer wall_clock_;
     mutable qint64 last_processed_us_ = 0;
     mutable qint64 last_wall_ns_ = 0;
+
+    // Signals the producer to invalidate its pre-generated buffer and restart
+    // from the current state (used by set_bpm, set_sequence, etc.)
+    std::atomic<bool> producer_reset_{false};
 };
