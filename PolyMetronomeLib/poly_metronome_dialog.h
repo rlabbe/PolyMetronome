@@ -6,7 +6,6 @@
 
 #include <QDial>
 #include <QDialog>
-#include <QKeyEvent>
 #include <QMouseEvent>
 
 class BpmDial : public QDial
@@ -37,12 +36,23 @@ class POLYMETRONOME_API PolyMetronomeDialog : public QDialog
     Q_OBJECT
 
 public:
-    explicit PolyMetronomeDialog(QWidget* parent = nullptr);
+    // no_focus = true: frameless, never-takes-focus tool palette intended
+    // for embedding in another application (custom title bar, NoFocus on all
+    // widgets, WS_EX_NOACTIVATE, manual drag handling, etc.).
+    // no_focus = false (default): standard QDialog with the OS title bar /
+    // frame, normal focus behaviour — for the standalone metronome app.
+    explicit PolyMetronomeDialog(QWidget* parent = nullptr, bool no_focus = false);
     ~PolyMetronomeDialog() override;
 
     PolyMetronomeState state() const;
     void apply_state(const PolyMetronomeState& s);
-    void send_key_command(Qt::Key key);
+
+    // Smooth BPM update: changes tempo without resetting the current position
+    // in the measure / sequence. Equivalent to the dialog's +/- buttons.
+    void set_bpm(int bpm);
+
+    // Toggle playback. Equivalent to clicking the Start/Stop button.
+    void toggle_start_stop();
 
 signals:
     void state_changed();
@@ -50,7 +60,12 @@ signals:
 protected:
     void closeEvent(QCloseEvent* event) override;
     void hideEvent(QHideEvent* event) override;
-    void keyPressEvent(QKeyEvent* event) override;
+    bool eventFilter(QObject* obj, QEvent* event) override;
+
+    // Manual dragging logic for frameless window
+    void mousePressEvent(QMouseEvent* event) override;
+    void mouseMoveEvent(QMouseEvent* event) override;
+    void mouseReleaseEvent(QMouseEvent* event) override;
 
 private slots:
     void on_start_stop_clicked();
@@ -82,4 +97,6 @@ private:
     QPushButton* start_stop_ = nullptr;
     CountInCard* count_in_ = nullptr;
     BeatMeterWidget* beat_meter_ = nullptr;
+    QPoint drag_position_; // Stores the offset for dragging
+    bool no_focus_ = false;
 };

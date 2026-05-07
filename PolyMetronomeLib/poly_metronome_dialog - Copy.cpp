@@ -23,62 +23,51 @@
 // dragging.
 
 
-PolyMetronomeDialog::PolyMetronomeDialog(QWidget* parent, bool no_focus)
+PolyMetronomeDialog::PolyMetronomeDialog(QWidget* parent)
     : QDialog(parent)
     , metronome_(new PolyMetronome(this))
-    , no_focus_(no_focus)
 {
     setWindowTitle("PolyMetronome");
 
+    // Main layout with 1px margin to show the border
     auto* main = new QVBoxLayout(this);
+    main->setContentsMargins(1, 1, 1, 1);
+    main->setSpacing(0);
 
-    // Where child widgets get added: into the main layout for the standalone
-    // app (regular OS frame), or into a padded content area inside a custom
-    // titled / bordered shell for the no-focus embedding case.
-    QVBoxLayout* widget_container = main;
+    // Provide the 1px border and a high-contrast close button
+    setStyleSheet(
+        "PolyMetronomeDialog { border: 1px solid #333; background-color: #222; }"
+        "QPushButton#CloseButton { "
+        "  border: none; color: #bbb; font-size: 11pt; font-family: 'Segoe UI'; "
+        "  background: transparent;"
+        "} "
+        "QPushButton#CloseButton:hover { background-color: #e81123; color: white; }"
+    );
 
-    if (no_focus_) {
-        // 1px outer margin so the styled border is visible
-        main->setContentsMargins(1, 1, 1, 1);
-        main->setSpacing(0);
+    auto* title_layout = new QHBoxLayout();
+    title_layout->setContentsMargins(0, 0, 0, 0);
+    title_layout->addStretch();
 
-        // 1px border and high-contrast custom close button
-        setStyleSheet(
-            "PolyMetronomeDialog { border: 1px solid #333; background-color: #222; }"
-            "QPushButton#CloseButton { "
-            "  border: none; color: #bbb; font-size: 11pt; font-family: 'Segoe UI'; "
-            "  background: transparent;"
-            "} "
-            "QPushButton#CloseButton:hover { background-color: #e81123; color: white; }"
-        );
+    auto* close_btn = new QPushButton("✕", this);
+    close_btn->setObjectName("CloseButton");
+    // Scales based on system-defined title bar height (DPI aware)
+    int btnHeight = style()->pixelMetric(QStyle::PM_TitleBarHeight);
+    close_btn->setFixedSize(static_cast<int>(btnHeight * 1.5), btnHeight);
 
-        auto* title_layout = new QHBoxLayout();
-        title_layout->setContentsMargins(0, 0, 0, 0);
-        title_layout->addStretch();
+    connect(close_btn, &QPushButton::clicked, this, &PolyMetronomeDialog::close);
+    title_layout->addWidget(close_btn);
+    main->addLayout(title_layout);
 
-        auto* close_btn = new QPushButton("✕", this);
-        close_btn->setObjectName("CloseButton");
-        // Scales based on system-defined title bar height (DPI aware)
-        int btnHeight = style()->pixelMetric(QStyle::PM_TitleBarHeight);
-        close_btn->setFixedSize(static_cast<int>(btnHeight * 1.5), btnHeight);
-
-        connect(close_btn, &QPushButton::clicked, this, &PolyMetronomeDialog::close);
-        title_layout->addWidget(close_btn);
-        main->addLayout(title_layout);
-
-        // Content container provides 12px padding inside the border
-        auto* content_area = new QWidget(this);
-        auto* content_layout = new QVBoxLayout(content_area);
-        content_layout->setContentsMargins(12, 0, 12, 12);
-        main->addWidget(content_area);
-
-        widget_container = content_layout;
-    }
+    // Content container to provide 12px padding inside the border
+    auto* content_area = new QWidget(this);
+    auto* content_layout = new QVBoxLayout(content_area);
+    content_layout->setContentsMargins(12, 0, 12, 12);
+    main->addWidget(content_area);
 
     meter_widget_ = new MeterSequenceWidget(this);
     count_in_ = new CountInCard(this);
     meter_widget_->set_prefix_widget(count_in_);
-    widget_container->addWidget(meter_widget_);
+    content_layout->addWidget(meter_widget_);
 
     auto* form = new QFormLayout;
     form->setContentsMargins(0, 8, 0, 0);
@@ -173,7 +162,7 @@ PolyMetronomeDialog::PolyMetronomeDialog(QWidget* parent, bool no_focus)
     start_row->addWidget(start_stop_);
     form->addRow(start_row);
 
-    widget_container->addLayout(form);
+    content_layout->addLayout(form);
 
     connect(meter_widget_, &MeterSequenceWidget::sequence_changed, this, &PolyMetronomeDialog::on_sequence_changed);
     connect(bpm_dial_, &QDial::valueChanged, this, &PolyMetronomeDialog::on_bpm_changed);
@@ -205,33 +194,28 @@ PolyMetronomeDialog::PolyMetronomeDialog(QWidget* parent, bool no_focus)
     adjustSize();
     setFixedHeight(height());
 
-    if (no_focus_) {
-        // Frameless + never-activating tool palette flags
-        setWindowFlags(Qt::Window | Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint | Qt::WindowDoesNotAcceptFocus);
-        setAttribute(Qt::WA_ShowWithoutActivating);
-        setFocusPolicy(Qt::NoFocus);
+    // Focus prevention and frameless flags
+    setWindowFlags(Qt::Window | Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint | Qt::WindowDoesNotAcceptFocus);
+    setAttribute(Qt::WA_ShowWithoutActivating);
+    setFocusPolicy(Qt::NoFocus);
 
-        for (QWidget* w : findChildren<QWidget*>()) {
-            w->setFocusPolicy(Qt::NoFocus);
-            w->setAttribute(Qt::WA_Hover, false);
-        }
-
-        installEventFilter(this);
-        for (QWidget* w : findChildren<QWidget*>())
-            w->installEventFilter(this);
-
-        // Windows-specific WS_EX_NOACTIVATE — must come after winId() forces
-        // the native HWND to exist so we can modify its extended style.
-        HWND hwnd = (HWND)winId();
-        SetWindowLongPtr(hwnd, GWL_EXSTYLE, GetWindowLongPtr(hwnd, GWL_EXSTYLE) | WS_EX_NOACTIVATE);
+    for (QWidget* w : findChildren<QWidget*>()) {
+        w->setFocusPolicy(Qt::NoFocus);
+        w->setAttribute(Qt::WA_Hover, false);
     }
+
+    installEventFilter(this);
+    for (QWidget* w : findChildren<QWidget*>())
+        w->installEventFilter(this);
+
+    // Apply Windows-specific WS_EX_NOACTIVATE
+    HWND hwnd = (HWND)winId();
+    SetWindowLongPtr(hwnd, GWL_EXSTYLE, GetWindowLongPtr(hwnd, GWL_EXSTYLE) | WS_EX_NOACTIVATE);
 }
 
 
 bool PolyMetronomeDialog::eventFilter(QObject* obj, QEvent* event)
 {
-    if (!no_focus_)
-        return QDialog::eventFilter(obj, event);
     Q_UNUSED(obj);
     switch (event->type()) {
     case QEvent::FocusIn:
@@ -427,10 +411,6 @@ void PolyMetronomeDialog::on_sound_mode_toggled(bool checked)
 
 void PolyMetronomeDialog::mousePressEvent(QMouseEvent* event)
 {
-    if (!no_focus_) {
-        QDialog::mousePressEvent(event);
-        return;
-    }
     if (event->button() == Qt::LeftButton) {
         // Dragging is restricted to the top area defined by the system title bar height
         int titleHeight = style()->pixelMetric(QStyle::PM_TitleBarHeight);
@@ -443,10 +423,6 @@ void PolyMetronomeDialog::mousePressEvent(QMouseEvent* event)
 
 void PolyMetronomeDialog::mouseMoveEvent(QMouseEvent* event)
 {
-    if (!no_focus_) {
-        QDialog::mouseMoveEvent(event);
-        return;
-    }
     if (event->buttons() & Qt::LeftButton && !drag_position_.isNull()) {
         move(event->globalPosition().toPoint() - drag_position_);
         event->accept();
@@ -455,10 +431,6 @@ void PolyMetronomeDialog::mouseMoveEvent(QMouseEvent* event)
 
 void PolyMetronomeDialog::mouseReleaseEvent(QMouseEvent* event)
 {
-    if (!no_focus_) {
-        QDialog::mouseReleaseEvent(event);
-        return;
-    }
     drag_position_ = QPoint();
     QDialog::mouseReleaseEvent(event);
 }
