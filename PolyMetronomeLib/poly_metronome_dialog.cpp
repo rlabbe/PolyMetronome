@@ -204,6 +204,8 @@ PolyMetronomeDialog::PolyMetronomeDialog(QWidget* parent, bool no_focus)
 
     adjustSize();
     setFixedHeight(height());
+    if (no_focus_)
+        setMinimumWidth(width());
 
     if (no_focus_) {
         // Frameless + never-activating tool palette flags
@@ -463,4 +465,29 @@ void PolyMetronomeDialog::mouseReleaseEvent(QMouseEvent* event)
     }
     drag_position_ = QPoint();
     QDialog::mouseReleaseEvent(event);
+}
+
+bool PolyMetronomeDialog::nativeEvent(const QByteArray& eventType, void* message, qintptr* result)
+{
+    if (no_focus_ && eventType == "windows_generic_MSG") {
+        MSG* msg = static_cast<MSG*>(message);
+        if (msg->message == WM_NCHITTEST) {
+            const int border = 6;
+            int screen_x = (short)(msg->lParam & 0xFFFF);
+            RECT r;
+            GetWindowRect(msg->hwnd, &r);
+            int x = screen_x - r.left;
+            int w = r.right - r.left;
+
+            if (x < border) {
+                *result = HTLEFT;
+                return true;
+            }
+            if (x >= w - border) {
+                *result = HTRIGHT;
+                return true;
+            }
+        }
+    }
+    return QDialog::nativeEvent(eventType, message, result);
 }
