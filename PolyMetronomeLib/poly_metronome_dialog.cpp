@@ -207,7 +207,7 @@ PolyMetronomeDialog::PolyMetronomeDialog(QWidget* parent, bool no_focus)
 
     if (no_focus_) {
         // Frameless + never-activating tool palette flags
-        setWindowFlags(Qt::Window | Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint | Qt::WindowDoesNotAcceptFocus);
+        setWindowFlags(Qt::Window | Qt::FramelessWindowHint | Qt::WindowDoesNotAcceptFocus);
         setAttribute(Qt::WA_ShowWithoutActivating);
         setFocusPolicy(Qt::NoFocus);
 
@@ -223,7 +223,9 @@ PolyMetronomeDialog::PolyMetronomeDialog(QWidget* parent, bool no_focus)
         // Windows-specific WS_EX_NOACTIVATE — must come after winId() forces
         // the native HWND to exist so we can modify its extended style.
         HWND hwnd = (HWND)winId();
-        SetWindowLongPtr(hwnd, GWL_EXSTYLE, GetWindowLongPtr(hwnd, GWL_EXSTYLE) | WS_EX_NOACTIVATE);
+        LONG_PTR ex = GetWindowLongPtr(hwnd, GWL_EXSTYLE);
+        ex = (ex | WS_EX_NOACTIVATE) & ~WS_EX_TOPMOST;
+        SetWindowLongPtr(hwnd, GWL_EXSTYLE, ex);
     }
 }
 
