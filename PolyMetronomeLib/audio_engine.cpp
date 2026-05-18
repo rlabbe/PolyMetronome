@@ -217,11 +217,6 @@ void AudioEngine::produce_audio()
     std::vector<char> local_out(chunk_frames * bytes_per_frame);
 
     while (producing_.load(std::memory_order_relaxed)) {
-        if (producer_reset_.exchange(false, std::memory_order_acquire)) {
-            // Drain the ring buffer so readData sees fresh data
-            ring_read_.store(ring_write_.load(std::memory_order_relaxed), std::memory_order_release);
-        }
-
         // How much space is available in the ring?
         size_t w = ring_write_.load(std::memory_order_relaxed);
         size_t r = ring_read_.load(std::memory_order_acquire);
@@ -229,10 +224,13 @@ void AudioEngine::produce_audio()
         size_t avail = ring_capacity_ - used;
 
         size_t chunk_bytes = chunk_frames * bytes_per_frame;
-        // Keep ~2 seconds ahead, sleep if ring is full enough
+        // Keep ~2 seconds ahead, wait if ring is full enough.
+        // set_bpm/set_sequence signal producer_wake_ after rewinding the
+        // write cursor, so we wake immediately on tempo changes.
         size_t target_ahead = static_cast<size_t>(sample_rate_ * 2) * bytes_per_frame;
         if (used >= target_ahead || avail < chunk_bytes) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(5));
+            QMutexLocker wl(&producer_wake_mutex_);
+            producer_wake_.wait(&producer_wake_mutex_, 5);
             continue;
         }
 
@@ -477,7 +475,6 @@ void AudioEngine::start()
     // Reset ring buffer
     ring_write_.store(0, std::memory_order_relaxed);
     ring_read_.store(0, std::memory_order_relaxed);
-    producer_reset_.store(false, std::memory_order_relaxed);
 
     // Start producer thread
     producing_.store(true, std::memory_order_release);
@@ -508,6 +505,7 @@ void AudioEngine::stop()
 {
     // Stop producer first
     producing_.store(false, std::memory_order_release);
+    producer_wake_.wakeOne();
     if (producer_thread_) {
         producer_thread_->wait();
         delete producer_thread_;
@@ -581,25 +579,51 @@ void AudioEngine::set_bpm(int bpm)
 {
     if (bpm <= 0)
         return;
+    qint64 played = processed_samples();
     QMutexLocker lock(&mutex_);
     if (bpm == bpm_)
         return;
+
+    // Figure out which beat the listener is on by unwinding the producer's
+    // lead over the playback position.
     double old_sps = samples_per_subtick_;
+    int64_t ahead = static_cast<int64_t>(position_samples_) - played;
+    int64_t ahead_sub = (old_sps > 0) ? static_cast<int64_t>(std::round(ahead / old_sps)) : 0;
+    int64_t play_sub = static_cast<int64_t>(subticks_in_measure_) - ahead_sub;
+    const MeasureSpec& m = current_measure_locked();
+    int curr_beats = m.beats > 0 ? m.beats : 4;
+    int64_t subs_in_meas = curr_beats * subs_per_beat_;
+    play_sub = ((play_sub % subs_in_meas) + subs_in_meas) % subs_in_meas;
+    int64_t beat = play_sub / subs_per_beat_;
+    // Start one subtick past the beat boundary so we don't re-trigger a
+    // click the listener already heard.
+    size_t beat_sub = static_cast<size_t>(beat * subs_per_beat_ + 1);
+
     bpm_ = bpm;
     recompute_sps_locked();
-    // Shift audio anchor so current position in the measure is preserved —
-    // only future subticks come at the new rate. No ring drain needed.
-    int64_t adj = static_cast<int64_t>(std::round(subticks_in_measure_ * (old_sps - samples_per_subtick_)));
-    anchor_position_ = static_cast<size_t>(static_cast<int64_t>(anchor_position_) + adj);
-    // Discard ticks beyond the producer's position (they were scheduled at
-    // the old tempo) and resync the tick scheduler to the audio scheduler
-    // so it regenerates them at the new tempo on its next iteration.
-    qint64 cut = static_cast<qint64>(position_samples_);
-    std::erase_if(pending_ticks_, [cut](const ScheduledTick& t) { return t.play_sample >= cut; });
+
+    // Rewind producer to playback position, preserving the beat.
+    position_samples_ = static_cast<size_t>(std::max<qint64>(0, played));
+    subticks_in_measure_ = beat_sub;
+    int64_t new_anchor = static_cast<int64_t>(position_samples_)
+                       - static_cast<int64_t>(std::round(beat_sub * samples_per_subtick_));
+    anchor_position_ = static_cast<size_t>(std::max<int64_t>(0, new_anchor));
+
+    // Sync tick scheduler and regenerate.
+    pending_ticks_.clear();
     tick_seq_measure_idx_ = seq_measure_idx_;
     tick_subticks_in_measure_ = subticks_in_measure_;
-    tick_anchor_position_ = anchor_position_;
     recompute_tick_sps_locked();
+    int64_t tick_anchor = static_cast<int64_t>(position_samples_)
+                        - static_cast<int64_t>(std::round(beat_sub * tick_samples_per_subtick_));
+    tick_anchor_position_ = static_cast<size_t>(std::max<int64_t>(0, tick_anchor));
+    schedule_ticks_to_locked(static_cast<qint64>(position_samples_) + 2 * sample_rate_);
+
+    // Move the write cursor back to the read cursor so the producer
+    // overwrites the unplayed old-tempo data with new-tempo data.
+    // readData never sees an empty buffer — it transitions seamlessly.
+    ring_write_.store(ring_read_.load(std::memory_order_relaxed), std::memory_order_release);
+    producer_wake_.wakeOne();
 }
 
 void AudioEngine::set_master_volume(float vol)
@@ -634,7 +658,8 @@ void AudioEngine::set_sequence(const MeterSequence& seq)
     tick_count_in_subtick_ = 0;
     pending_ticks_.clear();
     recompute_tick_sps_locked();
-    producer_reset_.store(true, std::memory_order_release);
+    ring_write_.store(ring_read_.load(std::memory_order_relaxed), std::memory_order_release);
+    producer_wake_.wakeOne();
 }
 
 void AudioEngine::set_mono_mode(bool on)

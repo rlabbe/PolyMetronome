@@ -7,7 +7,7 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "PolyMetronomeLib", "PolyMet
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "PolyMetronome", "PolyMetronome\PolyMetronome.vcxproj", "{8B9D6F20-5E3C-4B4E-AD2C-4F6E9D8C3B2C}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "QtWakeDpiFixer", "extern\QtWakeDpiFixer\QtWakeDpiFixer.vcxproj", "{A1B2C3D4-E5F6-4A1B-8C2D-3E4F5A6B7C8D}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "QtWakeDpiFixer", "..\QtWakeDpiFixer\QtWakeDpiFixer.vcxproj", "{A1B2C3D4-E5F6-4A1B-8C2D-3E4F5A6B7C8D}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -39,6 +39,6 @@ Global
 		HideSolutionNode = FALSE
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
-		SolutionGuid = {C0D1E2F3-6F4D-4C5F-BE3D-5F7F0E9D4C3D}
+		SolutionGuid = {D1E2F3A4-7F5E-4D6F-CF4E-6F8F1FAE5D4E}
 	EndGlobalSection
 EndGlobal

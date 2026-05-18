@@ -164,6 +164,9 @@
     <ProjectReference Include="..\PolyMetronomeLib\PolyMetronomeLib.vcxproj">
       <Project>{7A8C5E10-4F2B-4A3D-9C1B-3E5F8D7C2A1B}</Project>
     </ProjectReference>
+    <ProjectReference Include="..\extern\QtWakeDpiFixer\QtWakeDpiFixer.vcxproj">
+      <Project>{A1B2C3D4-E5F6-4A1B-8C2D-3E4F5A6B7C8D}</Project>
+    </ProjectReference>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Condition="Exists('$(QtMsBuild)\qt.targets')">

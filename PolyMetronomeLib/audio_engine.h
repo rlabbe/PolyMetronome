@@ -7,6 +7,7 @@
 #include <QIODevice>
 #include <QMutex>
 #include <QThread>
+#include <QWaitCondition>
 #include <array>
 #include <atomic>
 #include <optional>
@@ -96,6 +97,8 @@ private:
     // Producer thread
     QThread* producer_thread_ = nullptr;
     std::atomic<bool> producing_{false};
+    QMutex producer_wake_mutex_;
+    QWaitCondition producer_wake_;
 
     mutable QMutex mutex_;
     int bpm_ = 60;
@@ -129,8 +132,4 @@ private:
     QElapsedTimer wall_clock_;
     mutable qint64 last_processed_us_ = 0;
     mutable qint64 last_wall_ns_ = 0;
-
-    // Signals the producer to invalidate its pre-generated buffer and restart
-    // from the current state (used by set_bpm, set_sequence, etc.)
-    std::atomic<bool> producer_reset_{false};
 };
