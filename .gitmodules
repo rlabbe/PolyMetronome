@@ -1,0 +1,3 @@
+[submodule "extern/QtWakeDpiFixer"]
+	path = extern/QtWakeDpiFixer
+	url = https://github.com/rlabbe/QtWakeDpiFixer.git
