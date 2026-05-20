@@ -83,6 +83,9 @@ private slots:
     void on_sound_mode_toggled(bool checked);
 
 private:
+    void update_subdivision_slider_states();
+
+
     PolyMetronome* metronome_ = nullptr;
     MeterSequenceWidget* meter_widget_ = nullptr;
     BpmDial* bpm_dial_ = nullptr;
@@ -94,6 +97,8 @@ private:
     QSlider* triplet_volume_ = nullptr;
     QSlider* quintuplet_volume_ = nullptr;
     QSlider* accent_volume_ = nullptr;
+    QLabel* eighth_label_ = nullptr;
+    QLabel* sixteenth_label_ = nullptr;
     QPushButton* sound_mode_button_ = nullptr;
     QPushButton* start_stop_ = nullptr;
     CountInCard* count_in_ = nullptr;

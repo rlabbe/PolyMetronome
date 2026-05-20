@@ -87,7 +87,7 @@ PolyMetronomeDialog::PolyMetronomeDialog(QWidget* parent, bool no_focus)
     bpm_dial_->setRange(10, 240);
     bpm_dial_->setValue(60);
     bpm_dial_->setNotchesVisible(true);
-    bpm_dial_->setFixedSize(160, 160);
+    bpm_dial_->setFixedSize(200, 200);
     bpm_label_ = new QLabel("60", this);
     bpm_label_->setAlignment(Qt::AlignHCenter);
 
@@ -95,18 +95,26 @@ PolyMetronomeDialog::PolyMetronomeDialog(QWidget* parent, bool no_focus)
     bpm_label_font.setPointSize(bpm_label_font.pointSize() + 6);
     bpm_label_font.setBold(true);
     bpm_label_->setFont(bpm_label_font);
+    bpm_label_->setFixedWidth(bpm_label_->fontMetrics().horizontalAdvance("240") + 6);
 
     auto* bpm_dec = new QPushButton(QStringLiteral("−"), this);
     auto* bpm_inc = new QPushButton(QStringLiteral("+"), this);
     bpm_dec->setAutoRepeat(true);
     bpm_inc->setAutoRepeat(true);
-    bpm_dec->setFixedSize(48, 48);
-    bpm_inc->setFixedSize(48, 48);
+    bpm_dec->setFixedSize(28, 28);
+    bpm_inc->setFixedSize(28, 28);
     QFont bpm_btn_font = bpm_dec->font();
-    bpm_btn_font.setPointSize(bpm_btn_font.pointSize() + 4);
+    bpm_btn_font.setPointSize(bpm_btn_font.pointSize() + 2);
     bpm_btn_font.setBold(true);
     bpm_dec->setFont(bpm_btn_font);
     bpm_inc->setFont(bpm_btn_font);
+    const char* card_btn_qss =
+        "QPushButton { background-color: rgb(45,48,55); color: rgb(230,230,235);"
+        "  border: 1.5px solid rgb(80,85,95); border-radius: 5px; outline: none; padding: 0; }"
+        "QPushButton:hover { background-color: rgb(60,65,75); border-color: rgb(120,160,200); }"
+        "QPushButton:focus { outline: none; border-color: rgb(80,85,95); }";
+    bpm_dec->setStyleSheet(card_btn_qss);
+    bpm_inc->setStyleSheet(card_btn_qss);
     connect(bpm_dec, &QPushButton::clicked, this, [this]() {
         bpm_dial_->setValue(bpm_dial_->value() - 1);
         on_bpm_committed(bpm_dial_->value());
@@ -119,12 +127,17 @@ PolyMetronomeDialog::PolyMetronomeDialog(QWidget* parent, bool no_focus)
     auto* bpm_row = new QWidget(this);
     auto* bpm_v = new QVBoxLayout(bpm_row);
     bpm_v->setContentsMargins(0, 0, 0, 0);
-    bpm_v->addWidget(bpm_label_);
+    auto* label_row = new QHBoxLayout;
+    label_row->setSpacing(8);
+    label_row->addStretch();
+    label_row->addWidget(bpm_dec);
+    label_row->addWidget(bpm_label_);
+    label_row->addWidget(bpm_inc);
+    label_row->addStretch();
+    bpm_v->addLayout(label_row);
     auto* dial_row = new QHBoxLayout;
     dial_row->addStretch();
-    dial_row->addWidget(bpm_dec);
     dial_row->addWidget(bpm_dial_);
-    dial_row->addWidget(bpm_inc);
     dial_row->addStretch();
     bpm_v->addLayout(dial_row);
 
@@ -137,10 +150,44 @@ PolyMetronomeDialog::PolyMetronomeDialog(QWidget* parent, bool no_focus)
     bpm_section->addWidget(beat_meter_);
     form->addRow(bpm_section);
 
+    static const char* slider_qss =
+        "QSlider::groove:vertical {"
+        "  background: #141414;"
+        "  width: 6px;"
+        "  border: 1px solid #050505;"
+        "  border-radius: 3px;"
+        "}"
+        "QSlider::sub-page:vertical, QSlider::add-page:vertical {"
+        "  background: transparent;"
+        "}"
+        "QSlider::handle:vertical {"
+        "  background: qlineargradient(x1:0, y1:0, x2:0, y2:1,"
+        "      stop:0 #888888,"
+        "      stop:0.45 #b0b0b0,"
+        "      stop:0.48 #1a1a1a,"
+        "      stop:0.52 #1a1a1a,"
+        "      stop:0.55 #b0b0b0,"
+        "      stop:1 #555555);"
+        "  border: 1px solid #0a0a0a;"
+        "  height: 26px;"
+        "  width: 34px;"
+        "  margin: 0 -14px;"
+        "  border-radius: 4px;"
+        "}"
+        "QSlider::handle:vertical:hover {"
+        "  border: 1px solid #d0a040;"
+        "}"
+        "QSlider::handle:vertical:disabled {"
+        "  background: #303030;"
+        "  border: 1px solid #0a0a0a;"
+        "}";
+
     auto make_slider = [this](int default_pct) {
-        auto* s = new QSlider(Qt::Horizontal, this);
+        auto* s = new QSlider(Qt::Vertical, this);
         s->setRange(0, 100);
         s->setValue(default_pct);
+        s->setFixedSize(36, 110);
+        s->setStyleSheet(slider_qss);
         return s;
     };
 
@@ -152,13 +199,38 @@ PolyMetronomeDialog::PolyMetronomeDialog(QWidget* parent, bool no_focus)
     accent_volume_ = make_slider(100);
     master_volume_ = make_slider(100);
 
-    form->addRow("Beat", beat_volume_);
-    form->addRow("Eighth", eighth_volume_);
-    form->addRow("Sixteenth", sixteenth_volume_);
-    form->addRow("Triplet", triplet_volume_);
-    form->addRow("Quintuplet", quintuplet_volume_);
-    form->addRow("Accent", accent_volume_);
-    form->addRow("Master", master_volume_);
+    auto* sliders_row = new QHBoxLayout;
+    sliders_row->setContentsMargins(0, 8, 0, 0);
+    sliders_row->setSpacing(4);
+
+    auto add_slider_column = [&](QSlider* s, const QString& text, QLabel** out_label = nullptr) {
+        auto* col = new QVBoxLayout;
+        col->setContentsMargins(0, 0, 0, 0);
+        col->setSpacing(2);
+        col->setAlignment(Qt::AlignHCenter);
+        auto* sl_wrap = new QHBoxLayout;
+        sl_wrap->setContentsMargins(0, 0, 0, 0);
+        sl_wrap->addStretch();
+        sl_wrap->addWidget(s);
+        sl_wrap->addStretch();
+        col->addLayout(sl_wrap);
+        auto* label = new QLabel(text, this);
+        label->setAlignment(Qt::AlignHCenter);
+        col->addWidget(label);
+        if (out_label)
+            *out_label = label;
+        sliders_row->addLayout(col, 1);
+    };
+
+    add_slider_column(beat_volume_, "Beat");
+    add_slider_column(eighth_volume_, "Eighth", &eighth_label_);
+    add_slider_column(sixteenth_volume_, "Sixteenth", &sixteenth_label_);
+    add_slider_column(triplet_volume_, "Triplet");
+    add_slider_column(quintuplet_volume_, "Quintuplet");
+    add_slider_column(accent_volume_, "Accent");
+    add_slider_column(master_volume_, "Master");
+
+    form->addRow(sliders_row);
 
     sound_mode_button_ = new QPushButton(this);
     sound_mode_button_->setCheckable(true);
@@ -203,9 +275,11 @@ PolyMetronomeDialog::PolyMetronomeDialog(QWidget* parent, bool no_focus)
     on_sound_mode_toggled(sound_mode_button_->isChecked());
 
     adjustSize();
+    int min_w = 490;
+    if (width() < min_w)
+        resize(min_w, height());
+    setMinimumWidth(min_w);
     setFixedHeight(height());
-    if (no_focus_)
-        setMinimumWidth(width());
 
     if (no_focus_) {
         // Frameless + never-activating tool palette flags
@@ -312,6 +386,7 @@ void PolyMetronomeDialog::apply_state(const PolyMetronomeState& s)
     metronome_->set_quintuplet_volume(s.quintuplet_volume);
     metronome_->set_mono_mode(s.mono_mode);
     metronome_->set_sequence(s.sequence);
+    update_subdivision_slider_states();
 }
 
 void PolyMetronomeDialog::closeEvent(QCloseEvent* event)
@@ -386,13 +461,13 @@ void PolyMetronomeDialog::on_beat_volume_changed(int v)
 
 void PolyMetronomeDialog::on_eighth_volume_changed(int v)
 {
-    metronome_->set_eighth_volume(v / 100.0f);
+    metronome_->set_eighth_volume(eighth_volume_->isEnabled() ? v / 100.0f : 0.0f);
     emit state_changed();
 }
 
 void PolyMetronomeDialog::on_sixteenth_volume_changed(int v)
 {
-    metronome_->set_sixteenth_volume(v / 100.0f);
+    metronome_->set_sixteenth_volume(sixteenth_volume_->isEnabled() ? v / 100.0f : 0.0f);
     emit state_changed();
 }
 
@@ -418,7 +493,33 @@ void PolyMetronomeDialog::on_sequence_changed(const MeterSequence& seq)
 {
     metronome_->set_sequence(seq);
     beat_meter_->set_sequence(seq);
+    update_subdivision_slider_states();
     emit state_changed();
+}
+
+void PolyMetronomeDialog::update_subdivision_slider_states()
+{
+    const MeterSequence seq = meter_widget_->sequence();
+    bool disable_eighth = !seq.measures.empty();
+    bool disable_sixteenth = !seq.measures.empty();
+    for (const MeasureSpec& m : seq.measures) {
+        int nv = m.note_value > 0 ? m.note_value : 4;
+        if (nv < 8)
+            disable_eighth = false;
+        if (nv < 16)
+            disable_sixteenth = false;
+    }
+
+    auto apply = [](QSlider* s, QLabel* label, bool disable) {
+        s->setEnabled(!disable);
+        if (label)
+            label->setEnabled(!disable);
+    };
+    apply(eighth_volume_, eighth_label_, disable_eighth);
+    apply(sixteenth_volume_, sixteenth_label_, disable_sixteenth);
+
+    metronome_->set_eighth_volume(eighth_volume_->isEnabled() ? eighth_volume_->value() / 100.0f : 0.0f);
+    metronome_->set_sixteenth_volume(sixteenth_volume_->isEnabled() ? sixteenth_volume_->value() / 100.0f : 0.0f);
 }
 
 void PolyMetronomeDialog::on_sound_mode_toggled(bool checked)
