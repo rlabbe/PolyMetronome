@@ -3,6 +3,7 @@
 
 #include "beat_meter_widget.h"
 #include "count_in_card.h"
+#include "meter_card.h"
 #include "meter_sequence_widget.h"
 #include "poly_metronome.h"
 
@@ -29,6 +30,12 @@ PolyMetronomeDialog::PolyMetronomeDialog(QWidget* parent, bool no_focus)
     , no_focus_(no_focus)
 {
     setWindowTitle("PolyMetronome");
+
+    // Design unit. Capped at 16 (the value the original hand-tuned dimensions
+    // were calibrated for) so the dialog does not balloon on systems whose
+    // default font is larger than Segoe UI 9pt. Qt's high-DPI auto-scaling
+    // still handles physical pixel scaling on high-resolution screens.
+    const int u = std::min(fontMetrics().height(), 16);
 
     auto* main = new QVBoxLayout(this);
 
@@ -69,7 +76,7 @@ PolyMetronomeDialog::PolyMetronomeDialog(QWidget* parent, bool no_focus)
         // Content container provides 12px padding inside the border
         auto* content_area = new QWidget(this);
         auto* content_layout = new QVBoxLayout(content_area);
-        content_layout->setContentsMargins(12, 0, 12, 12);
+        content_layout->setContentsMargins(u * 3 / 4, 0, u * 3 / 4, u * 3 / 4);
         main->addWidget(content_area);
 
         widget_container = content_layout;
@@ -81,13 +88,13 @@ PolyMetronomeDialog::PolyMetronomeDialog(QWidget* parent, bool no_focus)
     widget_container->addWidget(meter_widget_);
 
     auto* form = new QFormLayout;
-    form->setContentsMargins(0, 8, 0, 0);
+    form->setContentsMargins(0, u / 2, 0, 0);
 
     bpm_dial_ = new BpmDial(this);
     bpm_dial_->setRange(10, 240);
     bpm_dial_->setValue(60);
     bpm_dial_->setNotchesVisible(true);
-    bpm_dial_->setFixedSize(200, 200);
+    bpm_dial_->setFixedSize(u * 12, u * 12);
     bpm_label_ = new QLabel("60", this);
     bpm_label_->setAlignment(Qt::AlignHCenter);
 
@@ -95,14 +102,15 @@ PolyMetronomeDialog::PolyMetronomeDialog(QWidget* parent, bool no_focus)
     bpm_label_font.setPointSize(bpm_label_font.pointSize() + 6);
     bpm_label_font.setBold(true);
     bpm_label_->setFont(bpm_label_font);
-    bpm_label_->setFixedWidth(bpm_label_->fontMetrics().horizontalAdvance("240") + 6);
+    bpm_label_->setFixedWidth(bpm_label_->fontMetrics().horizontalAdvance("240") + u / 2);
 
     auto* bpm_dec = new QPushButton(QStringLiteral("−"), this);
     auto* bpm_inc = new QPushButton(QStringLiteral("+"), this);
     bpm_dec->setAutoRepeat(true);
     bpm_inc->setAutoRepeat(true);
-    bpm_dec->setFixedSize(28, 28);
-    bpm_inc->setFixedSize(28, 28);
+    const int bpm_btn = u * 7 / 4;
+    bpm_dec->setFixedSize(bpm_btn, bpm_btn);
+    bpm_inc->setFixedSize(bpm_btn, bpm_btn);
     QFont bpm_btn_font = bpm_dec->font();
     bpm_btn_font.setPointSize(bpm_btn_font.pointSize() + 2);
     bpm_btn_font.setBold(true);
@@ -128,7 +136,7 @@ PolyMetronomeDialog::PolyMetronomeDialog(QWidget* parent, bool no_focus)
     auto* bpm_v = new QVBoxLayout(bpm_row);
     bpm_v->setContentsMargins(0, 0, 0, 0);
     auto* label_row = new QHBoxLayout;
-    label_row->setSpacing(8);
+    label_row->setSpacing(u / 2);
     label_row->addStretch();
     label_row->addWidget(bpm_dec);
     label_row->addWidget(bpm_label_);
@@ -145,17 +153,23 @@ PolyMetronomeDialog::PolyMetronomeDialog(QWidget* parent, bool no_focus)
     beat_meter_->set_bpm(bpm_dial_->value());
 
     auto* bpm_section = new QHBoxLayout;
-    bpm_section->setSpacing(8);
+    bpm_section->setSpacing(u / 2);
     bpm_section->addWidget(bpm_row);
     bpm_section->addWidget(beat_meter_);
     form->addRow(bpm_section);
 
-    static const char* slider_qss =
+    const int groove_w = u * 3 / 8;       // slim groove
+    const int handle_w = u * 17 / 8;      // ~2.1 u
+    const int handle_h = u * 13 / 8;      // ~1.6 u
+    const int handle_overhang = (handle_w - groove_w) / 2;
+    const int slider_w = handle_w + 2;
+    const int slider_h = u * 7;
+    const QString slider_qss = QString(
         "QSlider::groove:vertical {"
         "  background: #141414;"
-        "  width: 6px;"
+        "  width: %1px;"
         "  border: 1px solid #050505;"
-        "  border-radius: 3px;"
+        "  border-radius: %2px;"
         "}"
         "QSlider::sub-page:vertical, QSlider::add-page:vertical {"
         "  background: transparent;"
@@ -169,10 +183,10 @@ PolyMetronomeDialog::PolyMetronomeDialog(QWidget* parent, bool no_focus)
         "      stop:0.55 #b0b0b0,"
         "      stop:1 #555555);"
         "  border: 1px solid #0a0a0a;"
-        "  height: 26px;"
-        "  width: 34px;"
-        "  margin: 0 -14px;"
-        "  border-radius: 4px;"
+        "  height: %3px;"
+        "  width: %4px;"
+        "  margin: 0 -%5px;"
+        "  border-radius: %6px;"
         "}"
         "QSlider::handle:vertical:hover {"
         "  border: 1px solid #d0a040;"
@@ -180,13 +194,15 @@ PolyMetronomeDialog::PolyMetronomeDialog(QWidget* parent, bool no_focus)
         "QSlider::handle:vertical:disabled {"
         "  background: #303030;"
         "  border: 1px solid #0a0a0a;"
-        "}";
+        "}")
+        .arg(groove_w).arg(groove_w / 2)
+        .arg(handle_h).arg(handle_w).arg(handle_overhang).arg(handle_w / 8);
 
-    auto make_slider = [this](int default_pct) {
+    auto make_slider = [&](int default_pct) {
         auto* s = new QSlider(Qt::Vertical, this);
         s->setRange(0, 100);
         s->setValue(default_pct);
-        s->setFixedSize(36, 110);
+        s->setFixedSize(slider_w, slider_h);
         s->setStyleSheet(slider_qss);
         return s;
     };
@@ -200,13 +216,13 @@ PolyMetronomeDialog::PolyMetronomeDialog(QWidget* parent, bool no_focus)
     master_volume_ = make_slider(100);
 
     auto* sliders_row = new QHBoxLayout;
-    sliders_row->setContentsMargins(0, 8, 0, 0);
-    sliders_row->setSpacing(4);
+    sliders_row->setContentsMargins(0, u / 2, 0, 0);
+    sliders_row->setSpacing(u / 4);
 
     auto add_slider_column = [&](QSlider* s, const QString& text, QLabel** out_label = nullptr) {
         auto* col = new QVBoxLayout;
         col->setContentsMargins(0, 0, 0, 0);
-        col->setSpacing(2);
+        col->setSpacing(u / 8);
         col->setAlignment(Qt::AlignHCenter);
         auto* sl_wrap = new QHBoxLayout;
         sl_wrap->setContentsMargins(0, 0, 0, 0);
@@ -238,7 +254,7 @@ PolyMetronomeDialog::PolyMetronomeDialog(QWidget* parent, bool no_focus)
     sound_mode_button_->hide();
 
     start_stop_ = new QPushButton("Start", this);
-    start_stop_->setFixedSize(64, 64);
+    start_stop_->setFixedSize(u * 4, u * 4);
 
     auto* start_row = new QHBoxLayout;
     start_row->addStretch();
@@ -275,7 +291,27 @@ PolyMetronomeDialog::PolyMetronomeDialog(QWidget* parent, bool no_focus)
     on_sound_mode_toggled(sound_mode_button_->isChecked());
 
     adjustSize();
-    int min_w = 490;
+
+    // Minimum dialog width must fit the top row populated with 4 meter cards
+    // (in addition to the count-in card and the "+" add button) without a
+    // horizontal scrollbar appearing. All widths are computed from the same
+    // font-metric `u` that drives the cards themselves, so the constraint
+    // scales with system DPI.
+    const int card_w = MeterCard::card_size_for(fontMetrics()).width();
+    const int cards_layout_spacing = u / 2;
+    const int cards_layout_margin = u / 2;
+    const int cards_row_spacing = u * 3 / 8;
+    const int add_btn_w = u * 3;
+    const int meter_row_w = card_w                                  // count-in
+                          + cards_row_spacing
+                          + add_btn_w
+                          + cards_row_spacing
+                          + 2 * cards_layout_margin
+                          + 4 * card_w                              // 4 meter cards
+                          + 3 * cards_layout_spacing;
+    const int outer_margins = u * 3 / 2;
+    const int safety_pad = u / 2;
+    const int min_w = meter_row_w + outer_margins + safety_pad;
     if (width() < min_w)
         resize(min_w, height());
     setMinimumWidth(min_w);

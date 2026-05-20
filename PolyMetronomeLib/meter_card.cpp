@@ -10,22 +10,30 @@
 #include <QPixmap>
 #include <algorithm>
 
-static constexpr int k_card_w = 72;
-static constexpr int k_card_h = 80;
-static constexpr int k_arrow_strip_width = 14;
-static constexpr float k_arrow_half_width = 4.0f;
-static constexpr float k_arrow_height = 6.0f;
-static constexpr int k_arrow_y_offset = 9;
-static constexpr int k_card_pad = 2;
-static constexpr int k_big_font_inc = 8;
+QSize MeterCard::card_size_for(const QFontMetrics& fm)
+{
+    int u = std::min(fm.height(), 16);
+    return QSize(u * 9 / 2, u * 5);
+}
 
 MeterCard::MeterCard(QWidget* parent)
     : QWidget(parent)
 {
+    int u = std::min(fontMetrics().height(), 16);
+    card_w_ = u * 9 / 2;
+    card_h_ = u * 5;
+    arrow_strip_w_ = u * 7 / 8;
+    arrow_y_offset_ = u * 9 / 16;
+    card_pad_ = u / 8;
+    arrow_half_w_ = u * 0.25f;
+    arrow_h_ = u * 0.375f;
+    delete_box_ = u * 7 / 8;
+    big_font_inc_ = 8;
+
     setMouseTracking(true);
     setCursor(Qt::PointingHandCursor);
-    setMinimumSize(k_card_w, k_card_h);
-    setMaximumSize(k_card_w, k_card_h);
+    setMinimumSize(card_w_, card_h_);
+    setMaximumSize(card_w_, card_h_);
     compute_layout();
 }
 
@@ -37,16 +45,16 @@ void MeterCard::set_measure(const MeasureSpec& m)
 
 QSize MeterCard::sizeHint() const
 {
-    return QSize(k_card_w, k_card_h);
+    return QSize(card_w_, card_h_);
 }
 
 void MeterCard::compute_layout()
 {
-    layout_.card_rect = QRectF(0, 0, k_card_w, k_card_h).adjusted(k_card_pad, k_card_pad, -k_card_pad, -k_card_pad);
-    layout_.numbers_rect = layout_.card_rect.adjusted(0, 0, -k_arrow_strip_width, 0);
+    layout_.card_rect = QRectF(0, 0, card_w_, card_h_).adjusted(card_pad_, card_pad_, -card_pad_, -card_pad_);
+    layout_.numbers_rect = layout_.card_rect.adjusted(0, 0, -arrow_strip_w_, 0);
 
     QFont big_font = font();
-    big_font.setPointSize(big_font.pointSize() + k_big_font_inc);
+    big_font.setPointSize(big_font.pointSize() + big_font_inc_);
     big_font.setBold(true);
     layout_.number_text_height = QFontMetrics(big_font).height();
 
@@ -54,22 +62,22 @@ void MeterCard::compute_layout()
     layout_.beats_center_y = layout_.divider_y - layout_.number_text_height / 2;
     layout_.note_center_y = layout_.divider_y + layout_.number_text_height / 2;
 
-    float arrow_x = static_cast<float>(layout_.card_rect.right()) - k_arrow_strip_width / 2.0f;
-    layout_.beats_up_tip = QPointF(arrow_x, layout_.beats_center_y - k_arrow_y_offset);
-    layout_.beats_down_tip = QPointF(arrow_x, layout_.beats_center_y + k_arrow_y_offset);
-    layout_.note_up_tip = QPointF(arrow_x, layout_.note_center_y - k_arrow_y_offset);
-    layout_.note_down_tip = QPointF(arrow_x, layout_.note_center_y + k_arrow_y_offset);
+    float arrow_x = static_cast<float>(layout_.card_rect.right()) - arrow_strip_w_ / 2.0f;
+    layout_.beats_up_tip = QPointF(arrow_x, layout_.beats_center_y - arrow_y_offset_);
+    layout_.beats_down_tip = QPointF(arrow_x, layout_.beats_center_y + arrow_y_offset_);
+    layout_.note_up_tip = QPointF(arrow_x, layout_.note_center_y - arrow_y_offset_);
+    layout_.note_down_tip = QPointF(arrow_x, layout_.note_center_y + arrow_y_offset_);
 }
 
 MeterCard::Zone MeterCard::zone_at(QPoint p) const
 {
     if (deletable_) {
         QRect del(static_cast<int>(layout_.card_rect.left()),
-                  static_cast<int>(layout_.card_rect.bottom()) - 14, 14, 14);
+                  static_cast<int>(layout_.card_rect.bottom()) - delete_box_, delete_box_, delete_box_);
         if (del.contains(p))
             return Zone::DeleteX;
     }
-    if (p.x() < width() - k_arrow_strip_width)
+    if (p.x() < width() - arrow_strip_w_)
         return Zone::None;
     if (p.y() < layout_.divider_y)
         return p.y() < layout_.beats_center_y ? Zone::BeatsUp : Zone::BeatsDown;
@@ -80,9 +88,9 @@ void MeterCard::draw_arrow(QPainter& p, QPointF tip, bool up, QColor color)
 {
     QPolygonF tri;
     if (up)
-        tri << tip << QPointF(tip.x() - k_arrow_half_width, tip.y() + k_arrow_height) << QPointF(tip.x() + k_arrow_half_width, tip.y() + k_arrow_height);
+        tri << tip << QPointF(tip.x() - arrow_half_w_, tip.y() + arrow_h_) << QPointF(tip.x() + arrow_half_w_, tip.y() + arrow_h_);
     else
-        tri << tip << QPointF(tip.x() - k_arrow_half_width, tip.y() - k_arrow_height) << QPointF(tip.x() + k_arrow_half_width, tip.y() - k_arrow_height);
+        tri << tip << QPointF(tip.x() - arrow_half_w_, tip.y() - arrow_h_) << QPointF(tip.x() + arrow_half_w_, tip.y() - arrow_h_);
     p.setPen(Qt::NoPen);
     p.setBrush(color);
     p.drawPolygon(tri);
@@ -100,7 +108,7 @@ void MeterCard::paintEvent(QPaintEvent*)
     p.drawRoundedRect(layout_.card_rect, 5, 5);
 
     QFont big_font = font();
-    big_font.setPointSize(big_font.pointSize() + k_big_font_inc);
+    big_font.setPointSize(big_font.pointSize() + big_font_inc_);
     big_font.setBold(true);
     p.setFont(big_font);
 
@@ -108,8 +116,9 @@ void MeterCard::paintEvent(QPaintEvent*)
     p.drawText(QRect(static_cast<int>(layout_.numbers_rect.left()), layout_.divider_y - layout_.number_text_height - 1, static_cast<int>(layout_.numbers_rect.width()), layout_.number_text_height),
                Qt::AlignHCenter | Qt::AlignBottom, QString::number(measure_.beats));
 
+    int divider_inset = arrow_strip_w_;
     p.setPen(QPen(QColor(180, 185, 195), 1.5));
-    p.drawLine(QPointF(layout_.numbers_rect.left() + 14, layout_.divider_y), QPointF(layout_.numbers_rect.right() - 14, layout_.divider_y));
+    p.drawLine(QPointF(layout_.numbers_rect.left() + divider_inset, layout_.divider_y), QPointF(layout_.numbers_rect.right() - divider_inset, layout_.divider_y));
 
     p.setPen(QColor(230, 230, 235));
     p.drawText(QRect(static_cast<int>(layout_.numbers_rect.left()), layout_.divider_y + 1, static_cast<int>(layout_.numbers_rect.width()), layout_.number_text_height),
@@ -121,25 +130,28 @@ void MeterCard::paintEvent(QPaintEvent*)
         p.setFont(small_font);
         p.setPen(QColor(210, 210, 215));
         QString repeat_text = QString("×") + QString::number(measure_.repeat);
-        p.drawText(QRect(static_cast<int>(layout_.numbers_rect.left()), static_cast<int>(layout_.card_rect.top() + 3), static_cast<int>(layout_.numbers_rect.width()), 14),
+        p.drawText(QRect(static_cast<int>(layout_.numbers_rect.left()), static_cast<int>(layout_.card_rect.top() + card_pad_ * 3 / 2), static_cast<int>(layout_.numbers_rect.width()), arrow_strip_w_),
                    Qt::AlignRight | Qt::AlignTop, repeat_text);
     }
 
     if (!measure_.grouping.is_empty() && measure_.beats > 0) {
         int n_beats = measure_.beats;
-        int avail = static_cast<int>(layout_.numbers_rect.width()) - 10;
-        int dot_y = static_cast<int>(layout_.card_rect.bottom()) - 8;
+        int side_pad = card_pad_ * 5;
+        int avail = static_cast<int>(layout_.numbers_rect.width()) - side_pad * 2;
+        int dot_y = static_cast<int>(layout_.card_rect.bottom()) - card_pad_ * 4;
         int spacing = std::max(1, avail / std::max(1, n_beats));
-        int start_x = static_cast<int>(layout_.numbers_rect.left()) + 5 + spacing / 2;
+        int start_x = static_cast<int>(layout_.numbers_rect.left()) + side_pad + spacing / 2;
         int group_idx = 0;
         int in_group = 0;
+        int big_dot_r = std::max(2, card_pad_ * 3 / 2);
+        int small_dot_r = std::max(1, card_pad_);
         for (int i = 0; i < n_beats; ++i) {
             bool group_start = (in_group == 0);
             int x = start_x + i * spacing;
             QColor dot_color = group_start ? QColor(220, 200, 100) : QColor(120, 125, 135);
             p.setBrush(dot_color);
             p.setPen(Qt::NoPen);
-            int dot_radius = group_start ? 3 : 2;
+            int dot_radius = group_start ? big_dot_r : small_dot_r;
             p.drawEllipse(QPoint(x, dot_y), dot_radius, dot_radius);
             ++in_group;
             if (group_idx < static_cast<int>(measure_.grouping.sizes.size()) && in_group >= measure_.grouping.sizes[group_idx]) {
@@ -151,10 +163,11 @@ void MeterCard::paintEvent(QPaintEvent*)
 
     if (deletable_) {
         QRect del(static_cast<int>(layout_.card_rect.left()),
-                  static_cast<int>(layout_.card_rect.bottom()) - 14, 14, 14);
+                  static_cast<int>(layout_.card_rect.bottom()) - delete_box_, delete_box_, delete_box_);
         QColor x_color = hover_zone_ == Zone::DeleteX ? QColor(255, 90, 80) : QColor(130, 60, 55);
         p.setPen(QPen(x_color, 1.5, Qt::SolidLine, Qt::RoundCap));
-        QRectF xr = QRectF(del).adjusted(3, 3, -3, -3);
+        int xr_inset = std::max(2, delete_box_ / 5);
+        QRectF xr = QRectF(del).adjusted(xr_inset, xr_inset, -xr_inset, -xr_inset);
         p.drawLine(xr.topLeft(), xr.bottomRight());
         p.drawLine(xr.topRight(), xr.bottomLeft());
     }

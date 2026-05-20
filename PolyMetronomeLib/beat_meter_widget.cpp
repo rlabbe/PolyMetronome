@@ -31,15 +31,23 @@
 
 static constexpr int   kFrameIntervalMs = 4;
 static constexpr float kMaxSwing = 38.0f;   // degrees either side of vertical
-static constexpr int   kW = 210;
-static constexpr int   kNeedleH = 160;     // fixed height of needle/arc region
-static constexpr int   kTopPad = 8;        // gap above arc top
-static constexpr int   kRowH = 14;      // height per LED row
-static constexpr int   kRowPad = 7;       // padding above and below LED rows
+
+QSize BeatMeterWidget::size_for(const QFontMetrics& fm)
+{
+    int u = std::min(fm.height(), 16);
+    return QSize(u * 13, u * 10);
+}
 
 BeatMeterWidget::BeatMeterWidget(QWidget* parent)
     : QWidget(parent)
 {
+    int u = std::min(fontMetrics().height(), 16);
+    w_ = u * 13;
+    needle_h_ = u * 10;
+    top_pad_ = u / 2;
+    row_h_ = u * 7 / 8;
+    row_pad_ = u * 7 / 16;
+
     sequence_ = MeterSequence::default_4_4();
     setFixedSize(sizeHint());
     frame_timer_ = new QTimer(this);
@@ -103,18 +111,19 @@ void BeatMeterWidget::set_sequence(const MeterSequence& seq)
 
 QSize BeatMeterWidget::sizeHint() const
 {
-    return QSize(kW, kNeedleH);
+    return QSize(w_, needle_h_);
 }
 
 
 void BeatMeterWidget::compute_geometry()
 {
-    geometry_.cx = kW / 2.0f;
-    geometry_.radius = std::min(geometry_.cx - 12.0f, 80.0f);
-    geometry_.led_gap = 14.0f;
-    geometry_.led_r = 5.0f;
-    geometry_.py = geometry_.radius + kTopPad;
-    geometry_.rows_top = geometry_.py + kRowPad;
+    int u = std::min(fontMetrics().height(), 16);
+    geometry_.cx = w_ / 2.0f;
+    geometry_.radius = std::min(geometry_.cx - u * 0.75f, u * 5.0f);
+    geometry_.led_gap = u * 7 / 8.0f;
+    geometry_.led_r = u * 5 / 16.0f;
+    geometry_.py = geometry_.radius + top_pad_;
+    geometry_.rows_top = geometry_.py + row_pad_;
     pivot_ = QPointF(geometry_.cx, geometry_.py);
 }
 
@@ -158,6 +167,7 @@ void BeatMeterWidget::build_static_cache()
     p.setBrush(Qt::NoBrush);
     p.drawArc(arc_rect, 0, 180 * 16);
 
+    int u = std::min(fontMetrics().height(), 16);
     // Tick marks
     static const float kTickAngles[] = { -kMaxSwing, -kMaxSwing * 0.66f, -kMaxSwing * 0.33f,
                                           0,
@@ -166,7 +176,7 @@ void BeatMeterWidget::build_static_cache()
         float tick_deg = kTickAngles[i];
         float rad = (90.0f - tick_deg) * static_cast<float>(std::numbers::pi) / 180.0f;
         bool is_center = (i == 3);
-        float len = is_center ? 16.0f : 10.0f;
+        float len = is_center ? u * 1.0f : u * 0.625f;
         QPointF outer(geometry_.cx + geometry_.radius * std::cos(rad), geometry_.py - geometry_.radius * std::sin(rad));
         QPointF inner(geometry_.cx + (geometry_.radius - len) * std::cos(rad),
                       geometry_.py - (geometry_.radius - len) * std::sin(rad));
@@ -175,12 +185,14 @@ void BeatMeterWidget::build_static_cache()
     }
 
     // Pivot cap
+    float pivot_outer = u * 0.375f;
+    float pivot_inner = u * 0.1875f;
     p.setBrush(QColor(55, 32, 5));
     p.setPen(QPen(QColor(30, 15, 0), 1));
-    p.drawEllipse(pivot_, 6.0, 6.0);
+    p.drawEllipse(pivot_, pivot_outer, pivot_outer);
     p.setBrush(QColor(130, 90, 20));
     p.setPen(Qt::NoPen);
-    p.drawEllipse(pivot_, 3.0, 3.0);
+    p.drawEllipse(pivot_, pivot_inner, pivot_inner);
 
     // Pre-render the single lit LED (with glow halo) into its own pixmap so
     // paintEvent can blit it instead of drawing.
@@ -211,11 +223,12 @@ void BeatMeterWidget::build_static_cache()
     // LEDs in dark/off state
     const QColor col_off(110, 38, 8);
     int n_rows = sequence_.measures.empty() ? 0 : static_cast<int>(sequence_.measures.size());
+    float side_pad = u * 0.75f;
     for (int row = 0; row < n_rows; ++row) {
         int n_beats = sequence_.measures[row].beats;
-        float row_cy = geometry_.rows_top + row * kRowH + kRowH * 0.5f;
+        float row_cy = geometry_.rows_top + row * row_h_ + row_h_ * 0.5f;
         for (int b = 0; b < n_beats; ++b) {
-            float bx = 12.0f + (b + 0.5f) * (kW - 24.0f) / n_beats;
+            float bx = side_pad + (b + 0.5f) * (w_ - side_pad * 2) / n_beats;
             QRadialGradient grad(bx - geometry_.led_r * 0.3f, row_cy - geometry_.led_r * 0.3f, geometry_.led_r * 1.2f);
             grad.setColorAt(0, col_off.lighter(120));
             grad.setColorAt(1, col_off);
@@ -242,8 +255,10 @@ void BeatMeterWidget::paintEvent(QPaintEvent*)
     {
         int n_beats = sequence_.measures[active_measure_].beats;
         if (active_beat_ < n_beats) {
-            float row_cy = geometry_.rows_top + active_measure_ * kRowH + kRowH * 0.5f;
-            float bx = 12.0f + (active_beat_ + 0.5f) * (kW - 24.0f) / n_beats;
+            int u = std::min(fontMetrics().height(), 16);
+            float side_pad = u * 0.75f;
+            float row_cy = geometry_.rows_top + active_measure_ * row_h_ + row_h_ * 0.5f;
+            float bx = side_pad + (active_beat_ + 0.5f) * (w_ - side_pad * 2) / n_beats;
             p.drawPixmap(QPointF(bx, row_cy) - lit_led_origin_, lit_led_);
         }
     }
@@ -262,14 +277,17 @@ void BeatMeterWidget::paintEvent(QPaintEvent*)
     }
 
     float arm_rad = (90.0f - angle_deg) * std::numbers::pi_v<float> / 180.0f;
-    const float r_inner = 7.0f;
+    int u_p = std::min(fontMetrics().height(), 16);
+    const float r_inner = u_p * 7.0f / 16.0f;
+    const float tip_inset = u_p * 0.5f;
+    const float red_tip_len = u_p * 1.75f;
     const float arm_cos = std::cos(arm_rad);
     const float arm_sin = std::sin(arm_rad);
 
     QPointF base(pivot_.x() + r_inner * arm_cos,
                  pivot_.y() - r_inner * arm_sin);
-    QPointF tip(pivot_.x() + (geometry_.radius - 8) * arm_cos,
-                pivot_.y() - (geometry_.radius - 8) * arm_sin);
+    QPointF tip(pivot_.x() + (geometry_.radius - tip_inset) * arm_cos,
+                pivot_.y() - (geometry_.radius - tip_inset) * arm_sin);
 
     p.setPen(QPen(QColor(60, 35, 5, 70), 3, Qt::SolidLine, Qt::RoundCap));
     p.drawLine(base + QPointF(1.5, 1.5), tip + QPointF(1.5, 1.5));
@@ -278,7 +296,7 @@ void BeatMeterWidget::paintEvent(QPaintEvent*)
     p.drawLine(base, tip);
 
     p.setPen(QPen(QColor(180, 50, 20), 3, Qt::SolidLine, Qt::RoundCap));
-    QPointF tip_base(geometry_.cx + (geometry_.radius - 28) * arm_cos,
-                     geometry_.py - (geometry_.radius - 28) * arm_sin);
+    QPointF tip_base(geometry_.cx + (geometry_.radius - tip_inset - red_tip_len) * arm_cos,
+                     geometry_.py - (geometry_.radius - tip_inset - red_tip_len) * arm_sin);
     p.drawLine(tip_base, tip);
 }

@@ -7,6 +7,7 @@
 #include <QWidget>
 
 class QTimer;
+class QFontMetrics;
 class PolyMetronome;
 
 class BeatMeterWidget : public QWidget
@@ -15,6 +16,8 @@ class BeatMeterWidget : public QWidget
 
 public:
     explicit BeatMeterWidget(QWidget* parent = nullptr);
+
+    static QSize size_for(const QFontMetrics& fm);
 
     void set_bpm(int bpm);
     void set_running(bool running);
@@ -52,4 +55,10 @@ private:
     int active_beat_ = -1;
     int needle_direction_ = 1;
     qint64 last_beat_ms_ = -1;
+
+    int w_ = 0;
+    int needle_h_ = 0;
+    int top_pad_ = 0;
+    int row_h_ = 0;
+    int row_pad_ = 0;
 };

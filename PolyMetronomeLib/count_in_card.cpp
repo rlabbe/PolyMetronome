@@ -4,22 +4,29 @@
 #include <QPainter>
 #include <QWheelEvent>
 
-static constexpr int k_card_w = 72;
-static constexpr int k_card_h = 80;
-static constexpr int k_arrow_strip_width = 14;
-static constexpr float k_arrow_half_width = 4.0f;
-static constexpr float k_arrow_height = 6.0f;
-static constexpr int k_arrow_y_offset = 10;
-static constexpr int k_card_pad = 2;
-static constexpr int k_label_height = 18;
-static constexpr int k_big_font_inc = 24;
+QSize CountInCard::card_size_for(const QFontMetrics& fm)
+{
+    int u = std::min(fm.height(), 16);
+    return QSize(u * 9 / 2, u * 5);
+}
 
 CountInCard::CountInCard(QWidget* parent)
     : QWidget(parent)
     , value_(0)
 {
-    setMinimumSize(k_card_w, k_card_h);
-    setMaximumSize(k_card_w, k_card_h);
+    int u = std::min(fontMetrics().height(), 16);
+    card_w_ = u * 9 / 2;
+    card_h_ = u * 5;
+    arrow_strip_w_ = u * 7 / 8;
+    arrow_y_offset_ = u * 5 / 8;
+    card_pad_ = u / 8;
+    label_height_ = u * 9 / 8;
+    arrow_half_w_ = u * 0.25f;
+    arrow_h_ = u * 0.375f;
+    big_font_inc_ = 24;
+
+    setMinimumSize(card_w_, card_h_);
+    setMaximumSize(card_w_, card_h_);
     setMouseTracking(true);
     compute_layout();
 }
@@ -36,22 +43,22 @@ void CountInCard::set_value(int v)
 
 QSize CountInCard::sizeHint() const
 {
-    return QSize(k_card_w, k_card_h);
+    return QSize(card_w_, card_h_);
 }
 
 void CountInCard::compute_layout()
 {
-    layout_.card_rect = QRectF(0, 0, k_card_w, k_card_h).adjusted(k_card_pad, k_card_pad, -k_card_pad, -k_card_pad);
+    layout_.card_rect = QRectF(0, 0, card_w_, card_h_).adjusted(card_pad_, card_pad_, -card_pad_, -card_pad_);
     layout_.number_center_y = static_cast<int>(layout_.card_rect.center().y());
 
-    float arrow_x = static_cast<float>(layout_.card_rect.right()) - k_arrow_strip_width / 2.0f;
-    layout_.up_arrow_tip = QPointF(arrow_x, layout_.number_center_y - k_arrow_y_offset);
-    layout_.down_arrow_tip = QPointF(arrow_x, layout_.number_center_y + k_arrow_y_offset);
+    float arrow_x = static_cast<float>(layout_.card_rect.right()) - arrow_strip_w_ / 2.0f;
+    layout_.up_arrow_tip = QPointF(arrow_x, layout_.number_center_y - arrow_y_offset_);
+    layout_.down_arrow_tip = QPointF(arrow_x, layout_.number_center_y + arrow_y_offset_);
 }
 
 CountInCard::Zone CountInCard::zone_at(QPoint p) const
 {
-    if (p.x() < width() - k_arrow_strip_width)
+    if (p.x() < width() - arrow_strip_w_)
         return Zone::None;
     return p.y() < height() / 2 ? Zone::Up : Zone::Down;
 }
@@ -69,14 +76,14 @@ void CountInCard::paintEvent(QPaintEvent*)
     p.drawRoundedRect(layout_.card_rect, 5, 5);
 
     QFont big_font = font();
-    big_font.setPointSize(big_font.pointSize() + k_big_font_inc);
+    big_font.setPointSize(big_font.pointSize() + big_font_inc_);
     big_font.setBold(true);
     QFont label_font = font();
 
     // "count in" at top, centered across full card width
     p.setFont(label_font);
     p.setPen(QColor(160, 165, 175));
-    p.drawText(QRectF(layout_.card_rect.left(), layout_.card_rect.top(), layout_.card_rect.width(), k_label_height),
+    p.drawText(QRectF(layout_.card_rect.left(), layout_.card_rect.top(), layout_.card_rect.width(), label_height_),
                Qt::AlignHCenter | Qt::AlignVCenter, "count in");
 
     // Number centered in the full card
@@ -95,9 +102,9 @@ void CountInCard::paintEvent(QPaintEvent*)
     auto draw = [&](QPointF tip, bool up, QColor color) {
         QPolygonF tri;
         if (up)
-            tri << tip << QPointF(tip.x() - k_arrow_half_width, tip.y() + k_arrow_height) << QPointF(tip.x() + k_arrow_half_width, tip.y() + k_arrow_height);
+            tri << tip << QPointF(tip.x() - arrow_half_w_, tip.y() + arrow_h_) << QPointF(tip.x() + arrow_half_w_, tip.y() + arrow_h_);
         else
-            tri << tip << QPointF(tip.x() - k_arrow_half_width, tip.y() - k_arrow_height) << QPointF(tip.x() + k_arrow_half_width, tip.y() - k_arrow_height);
+            tri << tip << QPointF(tip.x() - arrow_half_w_, tip.y() - arrow_h_) << QPointF(tip.x() + arrow_half_w_, tip.y() - arrow_h_);
         p.setPen(Qt::NoPen);
         p.setBrush(color);
         p.drawPolygon(tri);

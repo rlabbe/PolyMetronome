@@ -24,6 +24,9 @@ constexpr const char* kCardMimeType = "application/x-meter-card-index";
 MeterSequenceWidget::MeterSequenceWidget(QWidget* parent)
     : QWidget(parent)
 {
+    const int u = std::min(fontMetrics().height(), 16);
+    QSize meter_sz = MeterCard::card_size_for(fontMetrics());
+
     auto* main = new QVBoxLayout(this);
     main->setContentsMargins(0, 0, 0, 0);
 
@@ -31,19 +34,19 @@ MeterSequenceWidget::MeterSequenceWidget(QWidget* parent)
     scroll_->setWidgetResizable(true);
     scroll_->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
     scroll_->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
-    scroll_->setFixedHeight(100);
+    scroll_->setFixedHeight(meter_sz.height() + u * 5 / 4);
     scroll_->setFrameShape(QFrame::NoFrame);
 
     cards_container_ = new QWidget;
     cards_container_->setAcceptDrops(true);
     cards_container_->installEventFilter(this);
     cards_layout_ = new QHBoxLayout(cards_container_);
-    cards_layout_->setSpacing(8);
-    cards_layout_->setContentsMargins(8, 8, 8, 8);
+    cards_layout_->setSpacing(u / 2);
+    cards_layout_->setContentsMargins(u / 2, u / 2, u / 2, u / 2);
     cards_layout_->addStretch();
     scroll_->setWidget(cards_container_);
     add_btn_ = new QPushButton("+", this);
-    add_btn_->setFixedSize(50, 80);
+    add_btn_->setFixedSize(u * 3, meter_sz.height());
     QFont f = add_btn_->font();
     f.setPointSize(f.pointSize() + 6);
     f.setBold(true);
@@ -59,7 +62,7 @@ MeterSequenceWidget::MeterSequenceWidget(QWidget* parent)
 
     cards_row_ = new QHBoxLayout;
     cards_row_->setContentsMargins(0, 0, 0, 0);
-    cards_row_->setSpacing(6);
+    cards_row_->setSpacing(u * 3 / 8);
     cards_row_->addWidget(add_btn_);
     cards_row_->addWidget(scroll_, 1);
     main->addLayout(cards_row_);
@@ -193,12 +196,14 @@ int MeterSequenceWidget::compute_insertion_index(int cursor_x) const
 
 int MeterSequenceWidget::compute_indicator_x(int target) const
 {
+    int u = std::min(fontMetrics().height(), 16);
+    int gap = u / 4;
     if (cards_.empty())
-        return 8;
+        return u / 2;
     if (target <= 0)
-        return cards_.front()->geometry().left() - 4;
+        return cards_.front()->geometry().left() - gap;
     if (target >= static_cast<int>(cards_.size()))
-        return cards_.back()->geometry().right() + 4;
+        return cards_.back()->geometry().right() + gap;
     return (cards_[target - 1]->geometry().right() + cards_[target]->geometry().left()) / 2;
 }
 
@@ -219,9 +224,11 @@ void MeterSequenceWidget::handle_drag_move(QDragMoveEvent* e)
     e->acceptProposedAction();
     int target = compute_insertion_index(e->position().toPoint().x());
     int x = compute_indicator_x(target);
-    int top = 4;
-    int h = cards_container_->height() - 8;
-    drop_indicator_->setGeometry(x - 1, top, 3, h);
+    int u = std::min(fontMetrics().height(), 16);
+    int top = u / 4;
+    int h = cards_container_->height() - u / 2;
+    int w = std::max(2, u / 6);
+    drop_indicator_->setGeometry(x - w / 2, top, w, h);
     drop_indicator_->show();
     drop_indicator_->raise();
 }
