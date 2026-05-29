@@ -89,6 +89,22 @@ const MeasureSpec* MeterSequence::at_absolute(int absolute_idx) const
     return nullptr;
 }
 
+// Index into measures[] (one entry per measure spec, i.e. the LED row) that the
+// given absolute index — which counts every repeat — falls within.
+int MeterSequence::row_of_absolute(int absolute_idx) const
+{
+    if (absolute_idx < 0 || measures.empty())
+        return -1;
+    int cum = 0;
+    for (int i = 0; i < static_cast<int>(measures.size()); ++i) {
+        int rep = std::max(1, measures[i].repeat);
+        if (absolute_idx < cum + rep)
+            return i;
+        cum += rep;
+    }
+    return -1;
+}
+
 MeterSequence MeterSequence::default_4_4()
 {
     MeterSequence s;

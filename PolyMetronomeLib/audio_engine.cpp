@@ -318,8 +318,10 @@ void AudioEngine::produce_audio()
                              << (static_cast<double>(static_cast<qint64>(spos) - last_beat_spos) / sample_rate_ * 1000.0) << "ms)");
                         last_beat_spos = static_cast<qint64>(spos);
                         // Record the beat onset for the widget (single walk drives
-                        // both audio and the needle).
-                        pending_ticks_.push_back({ static_cast<qint64>(spos), seq_measure_idx_, beat_in_measure });
+                        // both audio and the needle). The widget has one LED row
+                        // per measure entry, so map the absolute index (which
+                        // counts repeats) to its row.
+                        pending_ticks_.push_back({ static_cast<qint64>(spos), sequence_.row_of_absolute(seq_measure_idx_), beat_in_measure });
                         schedule(spos, Beat);
                         if (beat_in_measure == 0)
                             schedule(spos, Accent);

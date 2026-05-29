@@ -42,6 +42,7 @@ public:
 
     int total_measures() const;
     const MeasureSpec* at_absolute(int absolute_idx) const;
+    int row_of_absolute(int absolute_idx) const;
     bool empty() const { return measures.empty(); }
 
     QJsonArray to_json() const;
