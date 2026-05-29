@@ -269,15 +269,31 @@ void AudioEngine::produce_audio()
 
             size_t buffer_end = position_samples_ + chunk_frames;
 
-            // Count-in
+            // Count-in: render the first measure's pulse plus its enabled
+            // subdivisions (no accent/grouping), paced by that measure's beat.
             {
+                const MeasureSpec* m0 = sequence_.at_absolute(0);
+                int ci_nv = (m0 && m0->note_value > 0) ? m0->note_value : 4;
+                int ci_eighth_step = 60 * ci_nv / 8;
+                int ci_sixteenth_step = 60 * ci_nv / 16;
                 int total_ci_subs = count_in_beats_ * subs_per_beat_;
                 while (count_in_subtick_ < total_ci_subs) {
-                    size_t spos = count_in_anchor_ + static_cast<size_t>(std::round(count_in_subtick_ * count_in_sps_));
+                    size_t spos = count_in_anchor_ + static_cast<size_t>(std::round(count_in_subtick_ * samples_per_subtick_));
                     if (spos >= buffer_end)
                         break;
-                    if (spos >= position_samples_ && count_in_subtick_ % subs_per_beat_ == 0)
-                        schedule(spos, Beat);
+                    if (spos >= position_samples_) {
+                        int sub_in_beat = count_in_subtick_ % subs_per_beat_;
+                        if (sub_in_beat == 0)
+                            schedule(spos, Beat);
+                        else if (ci_eighth_step > 0 && ci_eighth_step < 60 && sub_in_beat % ci_eighth_step == 0)
+                            schedule(spos, Eighth);
+                        else if (ci_sixteenth_step > 0 && ci_sixteenth_step < 60 && sub_in_beat % ci_sixteenth_step == 0)
+                            schedule(spos, Sixteenth);
+                        else if (sub_in_beat == 20 || sub_in_beat == 40)
+                            schedule(spos, Triplet);
+                        else if (sub_in_beat == 12 || sub_in_beat == 24 || sub_in_beat == 36 || sub_in_beat == 48)
+                            schedule(spos, Quintuplet);
+                    }
                     ++count_in_subtick_;
                 }
             }
@@ -477,15 +493,6 @@ void AudioEngine::start()
         pending_ticks_.clear();
         position_samples_ = 0;
 
-        // Delay the first beat enough that the audio backend's pull pipeline
-        // is fully primed before any click is scheduled. 250 ms is comfortably
-        // past any typical sink buffer and double-pull window.
-        int initial_offset = sample_rate_ / 4;
-        // Count-in uses quarter-note beats. Samples per subtick (1/60th of a quarter note).
-        count_in_sps_ = static_cast<double>(sample_rate_) / static_cast<double>(bpm_);
-        count_in_anchor_ = initial_offset;
-        count_in_subtick_ = 0;
-        anchor_position_ = initial_offset + static_cast<size_t>(std::round(count_in_beats_ * subs_per_beat_ * count_in_sps_));
         seq_measure_idx_ = 0;
         subticks_in_measure_ = 0;
         keepalive_phase_ = 0.0;
@@ -493,6 +500,17 @@ void AudioEngine::start()
         if (sequence_.empty())
             sequence_ = MeterSequence::default_4_4();
         recompute_sps_locked();
+
+        // Delay the first beat enough that the audio backend's pull pipeline
+        // is fully primed before any click is scheduled. 250 ms is comfortably
+        // past any typical sink buffer and double-pull window.
+        int initial_offset = sample_rate_ / 4;
+        // Count-in is count_in beats of the first measure's pulse rendered ahead
+        // of the downbeat (with its enabled subdivisions), so the main sequence
+        // starts that many beats after the lead-in.
+        count_in_anchor_ = initial_offset;
+        count_in_subtick_ = 0;
+        anchor_position_ = initial_offset + static_cast<size_t>(std::round(count_in_beats_ * subs_per_beat_ * samples_per_subtick_));
     }
 
     // Reset ring buffer

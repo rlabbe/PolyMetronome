@@ -115,7 +115,6 @@ private:
     int count_in_beats_ = 0;
     int count_in_subtick_ = 0;
     size_t count_in_anchor_ = 0;
-    double count_in_sps_ = 0.0;
     uint32_t dither_state_ = 0x12345678u;
     double keepalive_phase_ = 0.0;
 
