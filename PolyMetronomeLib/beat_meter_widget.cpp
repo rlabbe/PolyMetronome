@@ -23,6 +23,8 @@
 #include "beat_meter_widget.h"
 #include "poly_metronome.h"
 
+#include "debug_log.h"
+
 #include <QTimer>
 #include <QPainter>
 #include <QPainterPath>
@@ -55,6 +57,12 @@ BeatMeterWidget::BeatMeterWidget(QWidget* parent)
     frame_timer_->setInterval(kFrameIntervalMs);
 
     connect(frame_timer_, &QTimer::timeout, this, [this]() {
+        static double last_tick_ms = 0.0;
+        double tnow = log_now_ms();
+        double tgap = tnow - last_tick_ms;
+        last_tick_ms = tnow;
+        if (tgap > 30.0)
+            LOGT("frame_timer GAP since last tick=" << tgap << "ms");
         if (metronome_) {
             qint64 played = metronome_->processed_samples();
             if (auto t = metronome_->pop_ticks_through(played)) {
@@ -102,8 +110,14 @@ void BeatMeterWidget::set_running(bool running)
 void BeatMeterWidget::set_sequence(const MeterSequence& seq)
 {
     sequence_ = seq;
-    active_measure_ = -1;
-    active_beat_ = -1;
+    int n_meas = static_cast<int>(sequence_.measures.size());
+    if (active_measure_ >= n_meas)
+        active_measure_ = n_meas > 0 ? n_meas - 1 : -1;
+    if (active_measure_ >= 0 && active_measure_ < n_meas) {
+        int n_beats = sequence_.measures[active_measure_].beats;
+        if (n_beats > 0 && active_beat_ >= n_beats)
+            active_beat_ = active_beat_ % n_beats;
+    }
     static_cache_ = QPixmap();   // invalidate
     setFixedSize(sizeHint());
     update();
@@ -128,14 +142,15 @@ void BeatMeterWidget::compute_geometry()
 }
 
 
-void BeatMeterWidget::build_static_cache()
+void BeatMeterWidget::build_face_cache()
 {
+    double t0 = log_now_ms();
     compute_geometry();
 
-    static_cache_ = QPixmap(size());
-    static_cache_.fill(Qt::transparent);
+    face_cache_ = QPixmap(size());
+    face_cache_.fill(Qt::transparent);
 
-    QPainter p(&static_cache_);
+    QPainter p(&face_cache_);
     p.setRenderHint(QPainter::Antialiasing);
 
     const QRectF r(0, 0, width(), height());
@@ -219,6 +234,26 @@ void BeatMeterWidget::build_static_cache()
         lp.setPen(QPen(QColor(40, 15, 3), 1));
         lp.drawEllipse(lit_led_origin_, geometry_.led_r, geometry_.led_r);
     }
+    LOGT("build_face_cache took " << (log_now_ms() - t0) << "ms");
+}
+
+void BeatMeterWidget::build_static_cache()
+{
+    double t0 = log_now_ms();
+    // The metronome face (background, arc, ticks, pivot, lit-LED pixmap) is
+    // independent of the meter sequence, so it is cached separately and only
+    // rebuilt on resize. A meter change rebuilds only this cheap LED layer,
+    // avoiding a full face repaint that would stall the needle timer and the
+    // GUI-thread audio pull on every meter edit.
+    if (face_cache_.size() != size())
+        build_face_cache();
+
+    static_cache_ = face_cache_;
+
+    QPainter p(&static_cache_);
+    p.setRenderHint(QPainter::Antialiasing);
+
+    int u = std::min(fontMetrics().height(), 16);
 
     // LEDs in dark/off state
     const QColor col_off(110, 38, 8);
@@ -237,12 +272,17 @@ void BeatMeterWidget::build_static_cache()
             p.drawEllipse(QPointF(bx, row_cy), geometry_.led_r, geometry_.led_r);
         }
     }
+    LOGT("build_static_cache took " << (log_now_ms() - t0) << "ms");
 }
 
 void BeatMeterWidget::paintEvent(QPaintEvent*)
 {
-    if (static_cache_.size() != size())
+    double pt0 = log_now_ms();
+    bool rebuilt = false;
+    if (static_cache_.size() != size()) {
+        rebuilt = true;
         build_static_cache();
+    }
 
     QPainter p(this);
     p.drawPixmap(0, 0, static_cache_);
@@ -299,4 +339,8 @@ void BeatMeterWidget::paintEvent(QPaintEvent*)
     QPointF tip_base(geometry_.cx + (geometry_.radius - tip_inset - red_tip_len) * arm_cos,
                      geometry_.py - (geometry_.radius - tip_inset - red_tip_len) * arm_sin);
     p.drawLine(tip_base, tip);
+
+    double pdur = log_now_ms() - pt0;
+    if (rebuilt || pdur > 5.0)
+        LOGT("paintEvent took " << pdur << "ms rebuilt=" << rebuilt);
 }

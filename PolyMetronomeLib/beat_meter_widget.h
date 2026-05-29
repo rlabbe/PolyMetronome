@@ -37,11 +37,13 @@ private:
         float rows_top;
     };
 
+    void build_face_cache();
     void build_static_cache();
 
     Geom geometry_;
     QPointF pivot_;
 
+    QPixmap face_cache_;
     QPixmap static_cache_;
     QPixmap lit_led_;
     QPointF lit_led_origin_;

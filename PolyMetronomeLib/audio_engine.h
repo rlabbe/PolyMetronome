@@ -10,6 +10,7 @@
 #include <QWaitCondition>
 #include <array>
 #include <atomic>
+#include <cstdint>
 #include <optional>
 #include <vector>
 
@@ -70,8 +71,8 @@ private:
 
     void rebuild_click_samples();
     void recompute_sps_locked();
-    void recompute_tick_sps_locked();
-    void schedule_ticks_to_locked(qint64 target_sample);
+    int64_t current_play_sub_locked(qint64 resume_sample) const;
+    void resume_at_locked(qint64 resume_sample, int64_t play_sub);
     const MeasureSpec& current_measure_locked() const;
     bool is_group_boundary_locked(int beat_in_measure) const;
     void create_sink();
@@ -118,16 +119,11 @@ private:
     uint32_t dither_state_ = 0x12345678u;
     double keepalive_phase_ = 0.0;
 
+    // Beat onsets recorded by the producer as it generates audio, popped by the
+    // widget at the playback position. A single sequence walk drives both the
+    // audio clicks and these records — there is no separate tick cursor.
     struct ScheduledTick { qint64 play_sample; int measure; int beat; };
     std::vector<ScheduledTick> pending_ticks_;
-
-    int tick_seq_measure_idx_ = 0;
-    size_t tick_subticks_in_measure_ = 0;
-    size_t tick_anchor_position_ = 0;
-    double tick_samples_per_subtick_ = 0.0;
-    int tick_count_in_subtick_ = 0;
-    double tick_count_in_sps_ = 0.0;
-    size_t tick_count_in_anchor_ = 0;
 
     QElapsedTimer wall_clock_;
     mutable qint64 last_processed_us_ = 0;

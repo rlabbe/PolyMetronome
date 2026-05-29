@@ -1,6 +1,7 @@
 #include "poly_metronome_dialog.h"
 #include <windows.h>
 
+#include "debug_log.h"
 #include "beat_meter_widget.h"
 #include "count_in_card.h"
 #include "meter_card.h"
@@ -468,8 +469,11 @@ void PolyMetronomeDialog::on_bpm_changed(int bpm)
 
 void PolyMetronomeDialog::on_bpm_committed(int bpm)
 {
+    LOGT("on_bpm_committed ENTER bpm=" << bpm);
     metronome_->set_bpm(bpm);
+    LOGT("on_bpm_committed after set_bpm");
     emit state_changed();
+    LOGT("on_bpm_committed EXIT");
 }
 
 void PolyMetronomeDialog::set_bpm(int bpm)
@@ -527,10 +531,15 @@ void PolyMetronomeDialog::on_accent_volume_changed(int v)
 
 void PolyMetronomeDialog::on_sequence_changed(const MeterSequence& seq)
 {
+    LOGT("on_sequence_changed ENTER");
     metronome_->set_sequence(seq);
+    LOGT("on_sequence_changed after metronome set_sequence");
     beat_meter_->set_sequence(seq);
+    LOGT("on_sequence_changed after beat_meter set_sequence");
     update_subdivision_slider_states();
+    LOGT("on_sequence_changed after update_subdivision_slider_states");
     emit state_changed();
+    LOGT("on_sequence_changed EXIT");
 }
 
 void PolyMetronomeDialog::update_subdivision_slider_states()
