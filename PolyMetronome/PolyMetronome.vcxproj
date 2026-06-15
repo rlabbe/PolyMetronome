@@ -47,17 +47,17 @@
     <Import Project="$(QtMsBuild)\qt_defaults.props" />
   </ImportGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|x64'" Label="QtSettings">
-    <QtInstall>6.8.3_msvc2022_64</QtInstall>
+    <QtInstall>6.8.3_msvc2022_64_static</QtInstall>
     <QtModules>core;gui;widgets;multimedia</QtModules>
     <QtBuildConfig>debug</QtBuildConfig>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Release|x64'" Label="QtSettings">
     <QtModules>core;gui;widgets;multimedia</QtModules>
     <QtBuildConfig>release</QtBuildConfig>
-    <QtInstall>6.8.3_msvc2022_64</QtInstall>
+    <QtInstall>6.8.3_msvc2022_64_static</QtInstall>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'ReleaseDbgInfo|x64'" Label="QtSettings">
-    <QtInstall>6.8.3_msvc2022_64</QtInstall>
+    <QtInstall>6.8.3_msvc2022_64_static</QtInstall>
     <QtModules>core;gui;widgets;multimedia</QtModules>
     <QtBuildConfig>release</QtBuildConfig>
   </PropertyGroup>
@@ -79,11 +79,17 @@
     <Import Project="$(QtMsBuild)\Qt.props" />
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
+  <PropertyGroup>
+    <QtWakeDpiFixerProjPath Condition="Exists('$(MSBuildProjectDirectory)\..\..\QtWakeDpiFixer\wake_dpi_fixer.h')">..\..\QtWakeDpiFixer\QtWakeDpiFixer.vcxproj</QtWakeDpiFixerProjPath>
+    <QtWakeDpiFixerProjPath Condition="'$(QtWakeDpiFixerProjPath)' == ''">..\extern\QtWakeDpiFixer\QtWakeDpiFixer.vcxproj</QtWakeDpiFixerProjPath>
+    <QtWakeDpiFixerIncPath Condition="Exists('$(MSBuildProjectDirectory)\..\..\QtWakeDpiFixer\wake_dpi_fixer.h')">..\..\QtWakeDpiFixer</QtWakeDpiFixerIncPath>
+    <QtWakeDpiFixerIncPath Condition="'$(QtWakeDpiFixerIncPath)' == ''">..\extern\QtWakeDpiFixer</QtWakeDpiFixerIncPath>
+  </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
-      <AdditionalIncludeDirectories>%(AdditionalIncludeDirectories);$(ProjectDir);..\PolyMetronomeLib;..\extern\QtWakeDpiFixer;$(Qt_INCLUDEPATH_)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>%(AdditionalIncludeDirectories);$(ProjectDir);..\PolyMetronomeLib;$(QtWakeDpiFixerIncPath);$(Qt_INCLUDEPATH_)</AdditionalIncludeDirectories>
       <AdditionalOptions>/FS %(AdditionalOptions)</AdditionalOptions>
-      <PreprocessorDefinitions>NOMINMAX;WIN32_LEAN_AND_MEAN;$(Qt_DEFINES_);%(PreprocessorDefinitions);_CRT_SECURE_NO_WARNINGS</PreprocessorDefinitions>
+      <PreprocessorDefinitions>QT_STATIC;POLYMETRONOMELIB_STATIC;NOMINMAX;WIN32_LEAN_AND_MEAN;$(Qt_DEFINES_);%(PreprocessorDefinitions);_CRT_SECURE_NO_WARNINGS</PreprocessorDefinitions>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
       <TreatWarningAsError>true</TreatWarningAsError>
@@ -100,8 +106,8 @@
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>
-      <AdditionalIncludeDirectories>%(AdditionalIncludeDirectories);$(ProjectDir);..\PolyMetronomeLib;..\extern\QtWakeDpiFixer;$(Qt_INCLUDEPATH_)</AdditionalIncludeDirectories>
-      <PreprocessorDefinitions>NOMINMAX;WIN32_LEAN_AND_MEAN;$(Qt_DEFINES_);%(PreprocessorDefinitions);_CRT_SECURE_NO_WARNINGS</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>%(AdditionalIncludeDirectories);$(ProjectDir);..\PolyMetronomeLib;$(QtWakeDpiFixerIncPath);$(Qt_INCLUDEPATH_)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>QT_STATIC;POLYMETRONOMELIB_STATIC;NOMINMAX;WIN32_LEAN_AND_MEAN;$(Qt_DEFINES_);%(PreprocessorDefinitions);_CRT_SECURE_NO_WARNINGS</PreprocessorDefinitions>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
       <TreatWarningAsError>true</TreatWarningAsError>
@@ -126,13 +132,13 @@
       <LinkTimeCodeGeneration>UseLinkTimeCodeGeneration</LinkTimeCodeGeneration>
     </Link>
     <PostBuildEvent>
-      <Command>copy $(TargetPath) d:\dev\MusicReader\bin</Command>
+      <Command>copy $(TargetPath) ..\..\MusicReader\bin</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='ReleaseDbgInfo|x64'">
     <ClCompile>
-      <AdditionalIncludeDirectories>%(AdditionalIncludeDirectories);$(ProjectDir);..\PolyMetronomeLib;..\extern\QtWakeDpiFixer;$(Qt_INCLUDEPATH_)</AdditionalIncludeDirectories>
-      <PreprocessorDefinitions>NOMINMAX;WIN32_LEAN_AND_MEAN;$(Qt_DEFINES_);%(PreprocessorDefinitions);_CRT_SECURE_NO_WARNINGS</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>%(AdditionalIncludeDirectories);$(ProjectDir);..\PolyMetronomeLib;$(QtWakeDpiFixerIncPath);$(Qt_INCLUDEPATH_)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>QT_STATIC;POLYMETRONOMELIB_STATIC;NOMINMAX;WIN32_LEAN_AND_MEAN;$(Qt_DEFINES_);%(PreprocessorDefinitions);_CRT_SECURE_NO_WARNINGS</PreprocessorDefinitions>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
       <TreatWarningAsError>false</TreatWarningAsError>
@@ -164,7 +170,7 @@
     <ProjectReference Include="..\PolyMetronomeLib\PolyMetronomeLib.vcxproj">
       <Project>{7A8C5E10-4F2B-4A3D-9C1B-3E5F8D7C2A1B}</Project>
     </ProjectReference>
-    <ProjectReference Include="..\extern\QtWakeDpiFixer\QtWakeDpiFixer.vcxproj">
+    <ProjectReference Include="$(QtWakeDpiFixerProjPath)">
       <Project>{A1B2C3D4-E5F6-4A1B-8C2D-3E4F5A6B7C8D}</Project>
     </ProjectReference>
   </ItemGroup>
