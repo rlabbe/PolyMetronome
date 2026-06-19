@@ -145,6 +145,7 @@
     <ClCompile Include="meter_sequence_widget.cpp" />
     <ClCompile Include="poly_metronome.cpp" />
     <ClCompile Include="poly_metronome_dialog.cpp" />
+    <QtRcc Include="PolyMetronomeLib.qrc" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="meter.h" />
